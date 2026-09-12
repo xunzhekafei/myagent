@@ -1947,6 +1947,7 @@ class WorkflowJournal:
     """一次运行的 journal：一条条记下每个 agent() 的结果，resume 时直接查缓存。"""
 
     def __init__(self, path: pathlib.Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         self.cache: dict[str, object] = {}
         if path.is_file():
             for line in path.read_text(encoding="utf-8").splitlines():
@@ -3306,15 +3307,25 @@ def agent_loop(
         else:
             round_tools, round_handlers = tools, handlers
 
+        printed_prefix = False  # 前缀（如「  [子任务] 」）只打一次，不能每个增量都打
         try:
-            response = client.messages.create(
+            # 流式输出：正文增量到达即打印（text_stream 自动跳过 thinking 块）
+            with client.messages.stream(
                 model=MODEL,
                 max_tokens=current_max_tokens,
                 thinking={"type": "adaptive"},  # 自适应思考：让 Claude 自己决定思考深度
                 system=system,
                 tools=round_tools,
                 messages=messages,
-            )
+            ) as stream:
+                for text in stream.text_stream:
+                    if not printed_prefix:
+                        print(prefix, end="", flush=True)
+                        printed_prefix = True
+                    print(text, end="", flush=True)
+                response = stream.get_final_message()
+            if printed_prefix:
+                print()  # 有输出才收尾换行
         except Exception as exc:
             # s08 补救：上下文仍超限被 API 拒绝时，压缩一次再重试
             err = str(exc).lower()
@@ -3341,12 +3352,6 @@ def agent_loop(
             if usage is not None:
                 GOAL.tokens += int(getattr(usage, "input_tokens", 0) or 0)
                 GOAL.tokens += int(getattr(usage, "output_tokens", 0) or 0)
-
-        # 打印模型这一轮说的话（纯工具调用的轮次没有文本，自然不打印）
-        for block in response.content:
-            if block.type == "text":
-                print(f"{prefix}{block.text}", end="", flush=True)
-        print()
 
         # s15 恢复机制：回复被长度上限截断 → 提高上限并请求续写
         #（必须在工具判断之前：截断时通常没有 tool_use，否则循环会直接结束）

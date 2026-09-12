@@ -328,6 +328,25 @@ Lead、一次性 subagent、队友的工具调用**都先经过 `PreToolUse`**�
 - 好的完成条件 = 结束状态 + 验证方式 + 限制条件（如「直到 pytest 退出码为 0，且不改动其它测试文件」）。
 - 两道通用出口：主循环轮数上限 + 连续阻止上限（`GOAL_MAX_BLOCKS`）；到上限交还控制权，**目标保留**。
 
+## 测试
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest               # 离线测试（66 个，不需要 API key，约 1 秒）
+python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
+```
+
+| 文件 | 覆盖 |
+| ---- | ---- |
+| `tests/test_offline_core.py` | cron 表达式校验/匹配、记忆预筛（含中文二元组切词）、权限三道闸门、MCP 命名与错误兜底、技能加载 |
+| `tests/test_tasks.py` | 原子认领、依赖解锁、owner 互斥、环检测、worktree 绑定（目录丢失时失败不回落） |
+| `tests/test_workflow.py` | JSON schema 校验、稳定调用键、journal 读写、pipeline 编排、续跑缓存命中（零重复调用） |
+| `tests/test_runtime.py` | 消息总线（破坏性读/超时）、后台任务生命周期、压缩管线、cron 调度状态机、目标循环四个分支 |
+| `tests/test_smoke_api.py` | （slow）真实工具轮 + 独立判断器 |
+
+隔离方式：`tests/conftest.py` 的 `iso` fixture 把 `WORKDIR` 和所有产物目录指到临时目录，
+并清空模块级全局——测试之间互不影响，也不会碰真实项目文件。
+
 ## 权限控制（三道闸门）
 
 参考 learn-claude-code s03：有副作用的工具执行前，会依次经过三道闸门。

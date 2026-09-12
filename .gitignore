@@ -27,3 +27,6 @@ venv/
 
 # Workflow 运行产物（快照/journal/输出）
 .runtime/
+
+# 会话存档
+.sessions/

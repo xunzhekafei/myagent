@@ -328,11 +328,21 @@ Lead、一次性 subagent、队友的工具调用**都先经过 `PreToolUse`**�
 - 好的完成条件 = 结束状态 + 验证方式 + 限制条件（如「直到 pytest 退出码为 0，且不改动其它测试文件」）。
 - 两道通用出口：主循环轮数上限 + 连续阻止上限（`GOAL_MAX_BLOCKS`）；到上限交还控制权，**目标保留**。
 
+## 会话持久化
+
+退出再启动，接着上次聊——主会话存到 `.sessions/latest.json`（临时文件 + 原子替换）。
+
+- 启动时自动恢复并提示条数；`/clear` 清空会话（**不影响** `.memory/` 长期记忆）。
+- 序列化处理了 SDK 对象：assistant 消息里的 `text`/`thinking`/`tool_use` 块用 `model_dump` 转 dict，
+  恢复时 dict 本来就是合法请求参数（thinking 的 signature 原样保留）。
+- 恢复时会清理**半截回合**：崩溃点可能留下没有对应 `tool_result` 的 `tool_use`，直接发会 400——自动丢弃。
+- 存档损坏会被忽略并从新会话开始，不阻塞启动。
+
 ## 测试
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest               # 离线测试（66 个，不需要 API key，约 1 秒）
+python -m pytest               # 离线测试（74 个，不需要 API key，约 1 秒）
 python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
 ```
 
@@ -342,6 +352,7 @@ python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
 | `tests/test_tasks.py` | 原子认领、依赖解锁、owner 互斥、环检测、worktree 绑定（目录丢失时失败不回落） |
 | `tests/test_workflow.py` | JSON schema 校验、稳定调用键、journal 读写、pipeline 编排、续跑缓存命中（零重复调用） |
 | `tests/test_runtime.py` | 消息总线（破坏性读/超时）、后台任务生命周期、压缩管线、cron 调度状态机、目标循环四个分支 |
+| `tests/test_session.py` | 序列化往返（SDK 对象/dict/str）、原子保存、损坏容错、半截回合清理、`/clear` |
 | `tests/test_smoke_api.py` | （slow）真实工具轮 + 独立判断器 |
 
 隔离方式：`tests/conftest.py` 的 `iso` fixture 把 `WORKDIR` 和所有产物目录指到临时目录，

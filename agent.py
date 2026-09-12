@@ -3492,6 +3492,98 @@ def ask(question: str, messages: list) -> list:
     return messages
 
 
+# ---------- 会话持久化：退出重启也能接着聊 ----------
+# 把主会话的 messages 存到 .sessions/latest.json（临时文件 + 原子替换）。
+# 难点在序列化：assistant 消息里是 SDK 的 block 对象（text/thinking/tool_use），
+# 用 model_dump 转成 dict；恢复时 dict 形式本来就是合法请求参数，可以直接用。
+# 恢复时会清理「半截回合」——崩溃点可能留下没有对应 tool_result 的 tool_use，直接发会 400。
+
+SESSION_DIR = WORKDIR / ".sessions"
+SESSION_FILE = SESSION_DIR / "latest.json"
+
+
+def _serialize_messages(messages: list) -> list:
+    """消息 → 纯 JSON 结构（SDK block 对象转 dict，dict/str 原样保留）。"""
+    out = []
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, str):
+            out.append({"role": message.get("role"), "content": content})
+            continue
+        blocks = []
+        for block in content if isinstance(content, list) else []:
+            if isinstance(block, dict):
+                blocks.append(block)
+            elif hasattr(block, "model_dump"):
+                try:
+                    blocks.append(block.model_dump(mode="json"))
+                except Exception:
+                    blocks.append(json.loads(block.model_dump_json()))
+            else:
+                blocks.append({"type": "text", "text": str(block)})
+        out.append({"role": message.get("role"), "content": blocks})
+    return out
+
+
+def _sanitize_session(messages: list) -> list:
+    """清理崩溃残留：末尾没有 tool_result 收尾的 tool_use 回合要丢掉。"""
+    while messages:
+        last = messages[-1]
+        content = last.get("content")
+        has_tool_use = isinstance(content, list) and any(
+            _btype(block) == "tool_use" for block in content)
+        if last.get("role") == "assistant" and has_tool_use:
+            messages.pop()
+            continue
+        break
+    while messages and messages[0].get("role") != "user":  # 首条必须是 user
+        messages.pop(0)
+    return messages
+
+
+def _save_session(quiet: bool = True) -> None:
+    if not session_history:
+        return
+    try:
+        SESSION_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "saved_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "messages": _serialize_messages(session_history),
+        }
+        tmp = SESSION_DIR / (SESSION_FILE.name + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, SESSION_FILE)  # 原子替换：写一半崩了也不会毁掉旧存档
+        if not quiet:
+            size_kb = SESSION_FILE.stat().st_size // 1024
+            print(f"[Session] 已保存 {len(session_history)} 条消息（{size_kb} KB）→ .sessions/latest.json")
+    except Exception as error:
+        print(f"[Session] 保存失败：{error}")
+
+
+def _load_session() -> list:
+    """读取上次会话；损坏就忽略并从新会话开始（不阻塞启动）。"""
+    if not SESSION_FILE.is_file():
+        return []
+    try:
+        payload = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+        messages = payload.get("messages", [])
+        if not isinstance(messages, list):
+            return []
+        return _sanitize_session(messages)
+    except Exception as error:
+        print(f"[Session] 上次会话读取失败（忽略，从新会话开始）：{error}")
+        return []
+
+
+def _clear_session() -> list:
+    """清空当前会话存档（记忆库 .memory/ 不受影响）。"""
+    try:
+        SESSION_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return []
+
+
 _input_queue: "queue.Queue[str | None]" = queue.Queue()
 
 
@@ -3505,13 +3597,15 @@ def _stdin_reader_loop() -> None:
 
 
 def chat_loop() -> None:
-    """交互模式：连续对话 + 定时任务 + 团队事件自动唤醒（s13）。"""
+    """交互模式：连续对话 + 定时任务 + 团队事件自动唤醒（s13）+ 会话持久化。"""
     global session_history, _STDIN_READER_STARTED
-    session_history = []
+    session_history = _load_session()
     start_runtime_threads()
     threading.Thread(target=_stdin_reader_loop, daemon=True).start()
     _STDIN_READER_STARTED = True
-    print("=== Agent 已就绪，输入问题开始对话（exit / quit 退出）===")
+    print("=== Agent 已就绪，输入问题开始对话（exit 退出，/clear 清空会话）===")
+    if session_history:
+        print(f"[Session] 已恢复上次会话：{len(session_history)} 条消息（/clear 可清空）")
     memory_count = len(_list_memories())
     if memory_count:
         print(f"[Memory] 记忆库已就绪：{memory_count} 条（.memory/）")
@@ -3531,6 +3625,7 @@ def chat_loop() -> None:
                     print(f"[wake: {len(events)} 个团队事件 → 新一轮]")
                     with AGENT_LOCK:
                         agent_loop(session_history)
+                    _save_session()
                     prompt_visible = False
                     continue
             # 2) 用户输入（非阻塞轮询，便于同时盯着收件箱）
@@ -3550,19 +3645,26 @@ def chat_loop() -> None:
             if not question:
                 continue
             prompt_visible = False
-            # s17：/goal 是会话级命令（设置/查看/清除目标），不是工具
+            # 会话命令：/clear 清空本次会话（不动记忆库），/goal 设置目标
+            if question.lower() in ("/clear", "/new"):
+                session_history = _clear_session()
+                print("[Session] 已清空当前会话（长期记忆 .memory/ 不受影响）")
+                continue
             if question.startswith("/goal"):
                 condition = _handle_goal_command(question)
                 if condition:
                     with AGENT_LOCK:
                         session_history = ask(condition, session_history)
+                    _save_session()
                 continue
             # 用户回合持锁，定时/团队回合不能同时改会话
             with AGENT_LOCK:
                 session_history = ask(question, session_history)
+            _save_session()
     except (EOFError, KeyboardInterrupt):
         print("\n再见！")
     finally:
+        _save_session(quiet=False)
         stop_runtime_threads()
 
 

@@ -36,6 +36,9 @@ def iso(tmp_path, monkeypatch):
     monkeypatch.setattr(agent, "MAILBOX_DIR", tmp_path / "mailboxes")
     monkeypatch.setattr(agent, "RUNTIME_DIR", tmp_path / "runtime")
     monkeypatch.setattr(agent, "CRON_FILE", tmp_path / "scheduled_tasks.json")
+    monkeypatch.setattr(agent, "SESSION_DIR", tmp_path / "sessions")
+    monkeypatch.setattr(agent, "SESSION_FILE", tmp_path / "sessions" / "latest.json")
+    monkeypatch.setattr(agent, "session_history", [])
 
     # 单例对象
     monkeypatch.setattr(agent, "TASKS", agent.TaskStore(tmp_path / "tasks"))

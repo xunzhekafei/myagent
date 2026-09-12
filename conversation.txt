@@ -1,0 +1,10 @@
+对话记录 - 2026-08-26
+
+用户：读取一下requirements.txt，告诉我里面的内容
+助手：读取了 requirements.txt，内容为：
+# Anthropic 官方 Python SDK
+anthropic>=0.116.0
+其中第一行是注释，第二行是依赖声明，表示需要安装版本不低于 0.116.0 的 Anthropic 官方 Python SDK。
+
+用户：写一个conversation.txt记录今天的对话
+助手：创建了 conversation.txt 文件，记录本次对话内容。

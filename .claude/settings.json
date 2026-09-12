@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile agent.py)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cygpath -w /tmp/ref_readme.md)"
+    ]
+  }
+}

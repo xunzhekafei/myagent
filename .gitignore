@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 环境变量（不要把密钥提交到 git）
+.env
+.env.local
+
+# 上下文压缩的存档/转存产物
+.transcripts/
+.task_outputs/
+
+# 跨会话记忆
+.memory/
+
+# 任务系统
+.tasks/
+
+# 定时任务（持久化）
+.scheduled_tasks.json
+
+# Agent Teams：收件箱与任务目录
+.mailboxes/
+.worktrees/
+
+# Workflow 运行产物（快照/journal/输出）
+.runtime/

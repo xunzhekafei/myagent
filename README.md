@@ -412,3 +412,10 @@ python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
 - **对话记忆**：把多轮对话历史存成文件，下次启动接着聊（现在还只在内存里）。
 - **换模型**：把 `MODEL` 改成 `claude-haiku-4-5`（映射到 deepseek-v4-flash，更快更便宜）。
 - **流式输出**：把 `tool_runner` 换成流式模式，让文字边生成边显示。
+
+## 许可
+
+MIT License（见 [LICENSE](LICENSE)）。
+
+面试题库数据来自 [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS)（Hugging Face，MIT 许可），
+使用 `interview/import_dataset.py` 导入。

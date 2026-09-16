@@ -96,7 +96,7 @@
 ```
 
 - **系统提示词**（`SYSTEM_PROMPT`）：告诉 agent 是什么角色、什么时候该用工具。
-- **工具**（`@beta_tool` 装饰的函数）：主 agent 目前有 29 个——基础 7 个 + `todo`/`load_skill`/`compact`/`task` + task 系统 6 个 + cron 3 个 + 团队 7 个 + `connect_mcp` + `run_workflow`。队友有自己的一套工具（11 个：工作区 5 个 + 任务 4 个 + `send_message`/`submit_plan`）。连接 MCP server 后，它的工具会动态加入主 agent 的工具池（不计入上面的固定数量）。
+- **工具**（`@beta_tool` 装饰的函数）：主 agent 目前有 32 个——基础 7 个 + `todo`/`load_skill`/`compact`/`task` + task 系统 6 个 + cron 3 个 + 团队 7 个 + `connect_mcp` + `run_workflow` + 面试三件套（`search_questions` / `save_interview_record` / `list_interviews`）。队友有自己的一套工具（11 个：工作区 5 个 + 任务 4 个 + `send_message`/`submit_plan`）。连接 MCP server 后，它的工具会动态加入主 agent 的工具池（不计入上面的固定数量）。
   加新工具 = 写一个 `@beta_tool` 函数 + 在 `TOOL_OBJECTS` 列表里加一行（schema 由函数签名自动生成）。
   注意：工具函数**必须返回字符串**（DeepSeek 兼容接口的要求，返回数字会报 400，用 `str()` 转换）。
   文件工具会把路径限制在项目目录内（`_safe_path`），防止 agent 读写工作目录之外的文件。
@@ -337,6 +337,39 @@ Lead、一次性 subagent、队友的工具调用**都先经过 `PreToolUse`**�
   恢复时 dict 本来就是合法请求参数（thinking 的 signature 原样保留）。
 - 恢复时会清理**半截回合**：崩溃点可能留下没有对应 `tool_result` 的 `tool_use`，直接发会 400——自动丢弃。
 - 存档损坏会被忽略并从新会话开始，不阻塞启动。
+
+## 面试题库（AI 模拟面试官 · 数据层）
+
+数据来自 **InterviewForge_GenDS**（Hugging Face，MIT 许可）：1647 道 AI 岗位题
+（AI/ML 工程师 576 / 数据分析师 576 / 数据科学家 495），字段含 question/keywords/category/level/role。
+原题是**英文且没有参考答案**——对模拟面试反而好（不泄题），面试官检索后用中文改写提问。
+
+```bash
+# 导入（huggingface.co 直连不通时用 hf-mirror 镜像）
+curl -L -o /tmp/interview_forge.csv \
+  https://hf-mirror.com/datasets/Davichick/InterviewForge_GenDS/resolve/main/interview_forge_v3_complete.csv
+python interview/import_dataset.py /tmp/interview_forge.csv
+```
+
+`search_questions(query, category, level, role, limit)`：**query 要用英文关键词**
+（如 `model deployment latency`），支持类别/难度/岗位过滤；中文查询会返回自我纠正提示。
+
+## AI 模拟面试官
+
+在 agent 上长出的一条完整业务线（数据层见上一节「面试题库」）：
+
+| 组件 | 位置 | 作用 |
+| ---- | ---- | ---- |
+| 面试官技能 | `skills/mock-interviewer/SKILL.md` | 一次一题、追问式深挖、面试中不给反馈、结束触发评分 |
+| 评分 workflow | `interview-report` | 完整问答记录（或 `.transcripts/` 存档文件）→ 解析问答对（解析为空会**报错**，不伪造报告）→ 逐题并行评分 → 汇总 |
+| 场次存档 | `.interviews/<候选人>/` | `save_interview_record` 存档、`list_interviews` 回顾对比 |
+| 题库检索 | `search_questions` | 英文关键词 + 类别/难度/岗位过滤 |
+
+评分维度：技术正确性 / 深度与原理 / 工程与场景思考 / 表达与结构，每维度**必须引用候选人原话作为证据**。
+跑一场完整面试：`/user 名字`（会提示模型候选人是）→ 说「开始面试」→ 面试官按技能流程走 →
+说「结束面试」→ 自动评分（真实试跑：3 题 6 个 agent、13.6K tokens）→ 存档。
+对话被压缩过、记录不完整时，评分可用 `transcript_file` 参数指向 `.transcripts/` 里最新的
+存档文件重建（压缩存档现在存的是可解析的消息 JSON）。
 
 ## 测试
 

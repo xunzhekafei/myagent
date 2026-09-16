@@ -84,6 +84,20 @@ def test_micro_compact_replaces_old_keeps_recent(iso):
     assert list(agent.TOOL_RESULTS_DIR.glob("old0.txt"))        # 被替换内容可恢复
 
 
+def test_compactor_archive_is_reloadable_json(iso):
+    """回归：压缩存档必须是可解析的消息 JSON（能被重新读回来重建对话），
+    而不是 SDK 对象的 repr 字符串——否则面试记录被压缩后就找不回来了。"""
+    import json as _json
+    import agent
+    messages = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"}
+                for i in range(60)]
+    agent.COMPACTOR.snip_compact(messages)
+    archives = list(agent.ARCHIVE_DIR.glob("snip-*.txt"))
+    assert archives
+    loaded = _json.loads(archives[0].read_text(encoding="utf-8"))
+    assert isinstance(loaded, list) and loaded[0] == {"role": "user", "content": "m0"}
+
+
 def test_tool_result_budget_persists_huge_output(iso):
     import agent
     messages = [{"role": "user", "content": [
@@ -187,6 +201,18 @@ def test_goal_commands(iso):
     agent._handle_goal_command("/goal clear")
     assert agent.GOAL.status == "cleared"
     assert "没有目标" in agent._goal_status_text()
+
+
+def test_summary_hook_never_prints_negative(iso, capsys, monkeypatch):
+    """回归：压缩会让历史变短，工具计数曾出现负数（"使用了 -3 次工具调用"）。"""
+    import agent
+    messages = [{"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "t", "content": "x"}]}]
+    monkeypatch.setattr(agent, "_LAST_TOOL_COUNT", 5)   # 模拟压缩前的更大计数
+    agent.summary_hook(messages)
+    out = capsys.readouterr().out
+    assert "次工具调用" not in out                      # 负增量不打印
+    assert agent._LAST_TOOL_COUNT == 1                  # 基线已重置
 
 
 # ---------- 队友自动旁路（回归：队友不能读用户输入） ----------

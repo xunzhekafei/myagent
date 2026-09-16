@@ -31,7 +31,7 @@ def iso(tmp_path, monkeypatch):
     monkeypatch.setattr(agent, "WORKDIR", tmp_path)
     monkeypatch.setattr(agent, "WORKTREES_DIR", tmp_path / "worktrees")
     monkeypatch.setattr(agent, "MEMORY_DIR", tmp_path / "memory")
-    monkeypatch.setattr(agent, "ARCHIVE_DIR", tmp_path / "transcripts")
+    monkeypatch.setattr(agent, "ARCHIVE_DIR", tmp_path / ".transcripts")
     monkeypatch.setattr(agent, "TOOL_RESULTS_DIR", tmp_path / "tool-results")
     monkeypatch.setattr(agent, "MAILBOX_DIR", tmp_path / "mailboxes")
     monkeypatch.setattr(agent, "RUNTIME_DIR", tmp_path / "runtime")
@@ -39,6 +39,10 @@ def iso(tmp_path, monkeypatch):
     monkeypatch.setattr(agent, "SESSION_DIR", tmp_path / "sessions")
     monkeypatch.setattr(agent, "SESSION_FILE", tmp_path / "sessions" / "latest.json")
     monkeypatch.setattr(agent, "session_history", [])
+    monkeypatch.setattr(agent, "SESSION_USER", "")
+    monkeypatch.setattr(agent, "QUESTION_BANK_PATH", tmp_path / "ai_questions.json")
+    monkeypatch.setattr(agent, "_QUESTION_CACHE", None)
+    monkeypatch.setattr(agent, "INTERVIEWS_DIR", tmp_path / "interviews")
 
     # 单例对象
     monkeypatch.setattr(agent, "TASKS", agent.TaskStore(tmp_path / "tasks"))

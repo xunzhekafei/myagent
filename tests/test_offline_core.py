@@ -97,6 +97,21 @@ def test_memory_document_roundtrip(iso):
     assert body == "正文内容"
 
 
+def test_read_file_paging(iso):
+    """回归：大文件必须能分页读——之前没有 offset，模型只能反复整读，
+    触发"压缩→指针→再读"死循环（面试报告演练事故）。"""
+    import agent
+    target = iso.WORKDIR / "big.txt"
+    target.write_text("\n".join(f"line{i}" for i in range(10)), encoding="utf-8")
+
+    page1 = agent.read_file.call({"path": "big.txt", "limit": 4})
+    assert "line0" in page1 and "line4" not in page1 and "offset=4" in page1
+    page2 = agent.read_file.call({"path": "big.txt", "limit": 4, "offset": 4})
+    assert "line4" in page2 and "line0" not in page2
+    tail = agent.read_file.call({"path": "big.txt", "offset": 8})
+    assert "line9" in tail and "文件末尾" in tail
+
+
 def test_memory_write_list_rebuild(iso):
     import agent
     agent._write_memory("测试记忆", "project", "描述", "正文")
@@ -147,6 +162,17 @@ def test_prompt_reads_from_queue(iso, feed):
     assert agent.permission_hook(FakeBlock("write_file", path="notes.txt", content="x")) is None
     feed("n")
     assert "拒绝" in agent.permission_hook(FakeBlock("write_file", path="notes.txt", content="x"))
+
+
+def test_archive_writes_are_auto_approved(iso, confirm_no):
+    """存档类目录（面试记录/记忆/会话）的写入免确认——自动存档不需要手动同意。"""
+    import agent
+    assert agent.permission_hook(
+        FakeBlock("write_file", path=".interviews/张三/20260101.json", content="y")) is None
+    assert agent.permission_hook(
+        FakeBlock("write_file", path=".memory/note.md", content="y")) is None
+    assert "拒绝" in agent.permission_hook(          # 普通文件仍然要确认
+        FakeBlock("write_file", path="notes.txt", content="x"))
 
 
 def test_scheduled_turn_auto_denies(iso, monkeypatch):

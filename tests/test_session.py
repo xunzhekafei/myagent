@@ -101,3 +101,35 @@ def test_clear_session_removes_archive(iso):
     assert agent.SESSION_FILE.is_file()
     assert agent._clear_session() == []
     assert not agent.SESSION_FILE.exists()
+
+
+def test_collect_input_coalesces_multiline(iso, monkeypatch):
+    """回归：输入线程按行读会把整段粘贴/多行回答拆碎——模型收到碎片后反复「请继续」、
+    把半截答案当完成（面试演练的核心体验问题）。交互模式下短窗口内的多行要合并。"""
+    import sys as _sys
+    import agent
+
+    class FakeInteractiveStdin:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(_sys, "stdin", FakeInteractiveStdin())
+    agent._input_queue.put("第二行")
+    agent._input_queue.put("第三行")
+    assert agent._collect_input("第一行") == "第一行\n第二行\n第三行"
+
+    class FakePipeStdin:
+        def isatty(self):
+            return False
+
+    monkeypatch.setattr(_sys, "stdin", FakePipeStdin())
+    assert agent._collect_input("单行") == "单行"        # 管道输入保持逐行
+
+
+def test_user_command(iso):
+    import agent
+    notice = agent._handle_user_command("/user 张三")
+    assert agent.SESSION_USER == "张三" and "张三" in notice
+    assert "李四" in agent._handle_user_command("/user 李四")
+    assert agent._handle_user_command("/user") is None      # 查询不改变名字
+    assert agent.SESSION_USER == "李四"

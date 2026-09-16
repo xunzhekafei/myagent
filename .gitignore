@@ -30,3 +30,6 @@ venv/
 
 # 会话存档
 .sessions/
+
+# 面试记录
+.interviews/

@@ -33,6 +33,8 @@ from anthropic import beta_tool
 # 模型名：DeepSeek 兼容接口会把 claude-opus* 映射到 deepseek-v4-pro（最强），
 # claude-haiku* / claude-sonnet* 则映射到 deepseek-v4-flash（更快更便宜）
 MODEL = "claude-opus-5"
+# 辅助调用（记忆召回/提取、目标判断）用快模型——它们每轮都跑，用 pro 会让每轮多等 10-30 秒
+AUX_MODEL = os.environ.get("AUX_MODEL", "claude-haiku-4-5")
 
 # 客户端会自动读取环境变量 ANTHROPIC_API_KEY（这里填 DeepSeek 的密钥即可）
 client = anthropic.Anthropic(
@@ -179,12 +181,13 @@ def _safe_path(path: str) -> pathlib.Path:
 
 
 @beta_tool
-def read_file(path: str, limit: int = 2000) -> str:
-    """读取一个文本文件的内容。
+def read_file(path: str, limit: int = 2000, offset: int = 0) -> str:
+    """读取文本文件的内容（支持分页）。大文件必须用 offset/limit 分页读，不要一次读完。
 
     Args:
         path: 相对于项目目录的文件路径，例如 README.md 或 notes/a.txt。
-        limit: 最多返回的行数，超出部分会省略（默认 2000）。
+        limit: 本次最多返回的行数（默认 2000）。
+        offset: 从第几行开始读（0 起，默认从头）——被截断时按返回提示里的 offset 继续。
     """
     p = _safe_path(path)
     if not p.exists():
@@ -195,10 +198,15 @@ def read_file(path: str, limit: int = 2000) -> str:
         lines = p.read_text(encoding="utf-8").splitlines()
     except UnicodeDecodeError:
         return f"错误：{path} 不是文本文件（可能是二进制文件）"
-    shown = lines[:limit]
-    if len(lines) > limit:
-        shown.append(f"...（共 {len(lines)} 行，只显示了前 {limit} 行）")
-    return "\n".join(shown)
+    total = len(lines)
+    start = max(0, int(offset))
+    window = lines[start:start + max(1, int(limit))]
+    if start + limit < total:
+        window.append(f"...（共 {total} 行，本次显示第 {start + 1}-{start + len(window)} 行；"
+                      f"继续读用 offset={start + limit}）")
+    elif start > 0:
+        window.append(f"...（共 {total} 行，已到文件末尾）")
+    return "\n".join(window)
 
 
 @beta_tool
@@ -1453,6 +1461,7 @@ class TeammateRuntime:
                 system=self.system,
                 tools=TEAMMATE_TOOLS,
                 messages=self.messages,
+                cache_control={"type": "ephemeral"},
             )
         except Exception as exc:
             BUS.send(self.name, "lead", f"{type(exc).__name__}: {exc}", "error")
@@ -2028,7 +2037,7 @@ def _workflow_agent_call(prompt: str, schema: dict | None, label: str, stats: di
 
     def call(extra: str = "") -> str:
         response = client.messages.create(
-            model=MODEL, max_tokens=4000, system=system,
+            model=MODEL, max_tokens=8000, system=system,  # 思考也吃配额，留足空间让 JSON 写完
             messages=[{"role": "user", "content": prompt + extra}],
         )
         stats["agents"] += 1
@@ -2276,8 +2285,8 @@ def run_workflow(name: str, args: dict | None = None, resume_from_run_id: str = 
             "tokens": task.stats["tokens"], "result": result,
         }
         text = json.dumps(payload, ensure_ascii=False)
-        if len(text) > 6000:
-            text = text[:6000] + "...（结果过长已截断，完整内容见 .runtime/ 输出文件）"
+        if len(text) > 20000:  # 面试报告带逐题评分和证据，6000 太小（曾把报告 JSON 截断成非法 JSON）
+            text = text[:20000] + "...（结果过长已截断，完整内容见 .runtime/ 输出文件）"
         return text
     except WorkflowInputError as exc:
         return f"错误：{exc}"
@@ -2352,7 +2361,7 @@ def _goal_evaluate(messages: list) -> dict:
         f"目标（完成条件）：{GOAL.condition}\n\n对话记录：\n{dialogue}"
     )
     response = client.messages.create(
-        model=MODEL, max_tokens=2000,  # 思考也占配额，留足空间让 JSON 写完
+        model=AUX_MODEL, max_tokens=2000,  # 思考也占配额，留足空间让 JSON 写完
         system="你只做判断，不执行任务、不调用工具。",
         messages=[{"role": "user", "content": prompt}],
     )
@@ -2414,6 +2423,326 @@ def _goal_stop_hook(messages: list) -> str | None:
 # 注：_goal_stop_hook 在下面的 hooks 注册区注册（register_hook 定义在那一节）
 
 
+# ---------- 面试题库：本地检索（AI 模拟面试官的数据层） ----------
+# 题库来自 InterviewForge_GenDS（MIT）：1647 道 AI 岗位题（AI/ML 工程师/数据科学家/数据分析师），
+# 字段有 question/keywords/category/level/role。原题是英文、没有参考答案——对模拟面试反而好（不泄题），
+# 面试官检索后用中文提问。导入方式：python interview/import_dataset.py <原始CSV路径>
+
+QUESTION_BANK_PATH = WORKDIR / "interview" / "data" / "ai_questions.json"
+_QUESTION_CACHE: list | None = None
+
+
+def _load_question_bank() -> list:
+    global _QUESTION_CACHE
+    if _QUESTION_CACHE is None:
+        if not QUESTION_BANK_PATH.is_file():
+            _QUESTION_CACHE = []
+        else:
+            try:
+                _QUESTION_CACHE = json.loads(QUESTION_BANK_PATH.read_text(encoding="utf-8"))
+            except Exception as error:
+                print(f"[题库] 读取失败：{error}")
+                _QUESTION_CACHE = []
+    return _QUESTION_CACHE
+
+
+@beta_tool
+def search_questions(query: str, category: str = "", level: str = "", role: str = "",
+                     limit: int = 5) -> str:
+    """从本地面试题库检索题目（AI 岗位：AI/ML 工程师、数据科学家、数据分析师）。
+    注意：题库原文是英文，query 必须用英文关键词（如 "model deployment latency"），
+    检索到之后你自己翻译/改写成中文向候选人提问。
+
+    Args:
+        query: 英文关键词，如 "model deployment latency"、"feature engineering"、"bias variance"。
+        category: 类别过滤（子串匹配），如 "System Design"、"Coding"。
+        level: 难度过滤，如 "Level 1"（基础）/ "Level 2"（实战）/ "Level 3"（边界与冲突）。
+        role: 岗位过滤，如 "AI/ML"、"Data Scientist"、 "Data Analyst"。
+        limit: 返回条数（默认 5，最多 10）。
+    """
+    bank = _load_question_bank()
+    if not bank:
+        return ("错误：题库为空——先运行 python interview/import_dataset.py <原始CSV路径> 导入；"
+                "原始数据在 https://hf-mirror.com/datasets/Davichick/InterviewForge_GenDS")
+    terms = _text_terms(query) if query.strip() else set()
+    candidates = []
+    for record in bank:
+        if category and category.lower() not in record.get("category", "").lower():
+            continue
+        if level and level.lower() not in record.get("level", "").lower():
+            continue
+        if role and role.lower() not in record.get("role", "").lower():
+            continue
+        score = sum(1 for term in terms
+                    if term in f"{record.get('question','')} {' '.join(record.get('keywords', []))} "
+                               f"{record.get('category','')} {record.get('role','')}".lower()) if terms else 1
+        if score:
+            candidates.append((score, record))
+    if not candidates:
+        hint = ""
+        if re.search(r"[一-鿿]", query):  # 中文查询必然搜不到英文题库，给出自我纠正提示
+            hint = "（提示：题库是英文的，请改用英文关键词重新检索，例如 'model deployment'、'feature engineering'）"
+        return (f"没有找到匹配的题目（query={query!r} category={category!r} "
+                f"level={level!r} role={role!r}）{hint}")
+    candidates.sort(key=lambda item: -item[0])
+    limit = max(1, min(int(limit), 10))
+    lines = []
+    for _score, record in candidates[:limit]:
+        lines.append(
+            f"- [{record.get('role','')} | {record.get('category','')} | {record.get('level','')}] "
+            f"{record.get('question','')}\n"
+            f"  关键词：{', '.join(record.get('keywords', [])[:6])}"
+        )
+    return (f"找到 {len(candidates)} 道匹配，返回前 {min(limit, len(candidates))} 道：\n\n"
+            + "\n\n".join(lines))
+
+
+# -------- 面试评分 workflow：解析问答 → 逐题评分 → 汇总报告 --------
+INTERVIEW_SCORE_DIMENSIONS = ("技术正确性", "深度与原理", "工程与场景思考", "表达与结构")
+
+INTERVIEW_QA_SCHEMA = {
+    "type": "object",
+    "properties": {"qa": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"question": {"type": "string"}, "answer": {"type": "string"}},
+        "required": ["question", "answer"]}}},
+    "required": ["qa"],
+}
+INTERVIEW_SCORE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        **{dimension: {"type": "number"} for dimension in INTERVIEW_SCORE_DIMENSIONS},
+        "evidence": {"type": "string"},
+        "suggestion": {"type": "string"},
+    },
+    "required": [*INTERVIEW_SCORE_DIMENSIONS, "evidence", "suggestion"],
+}
+INTERVIEW_REPORT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "overall": {"type": "number"},
+        "dimension_scores": {
+            "type": "object",
+            "properties": {dimension: {"type": "number"} for dimension in INTERVIEW_SCORE_DIMENSIONS},
+            "required": list(INTERVIEW_SCORE_DIMENSIONS)},
+        "strengths": {"type": "array", "items": {"type": "string"}},
+        "weaknesses": {"type": "array", "items": {"type": "string"}},
+        "recommendations": {"type": "array", "items": {"type": "string"}},
+        "summary": {"type": "string"},
+    },
+    "required": ["overall", "dimension_scores", "strengths",
+                 "weaknesses", "recommendations", "summary"],
+}
+
+
+def _render_transcript_file(path_text: str, tail: int = 80) -> str:
+    """从压缩器存档（.transcripts/*.txt，消息 JSON 列表）重建对话文本。"""
+    path = pathlib.Path(path_text)
+    if not path.is_absolute():
+        path = WORKDIR / path_text
+    path = path.resolve()
+    if not path.is_relative_to(WORKDIR.resolve()):
+        raise WorkflowInputError(f"记录文件路径越界：{path_text}")
+    if not path.is_file():
+        raise WorkflowInputError(f"找不到记录文件：{path_text}")
+    try:
+        messages = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as error:
+        raise WorkflowInputError(f"记录文件解析失败（应为消息 JSON 列表）：{error}")
+    if not isinstance(messages, list):
+        raise WorkflowInputError("记录文件格式不对：应为消息列表")
+    lines = []
+    for message in messages[-max(1, int(tail)):]:
+        role = "面试官" if message.get("role") == "assistant" else "候选人"
+        content = message.get("content")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            text = "\n".join(
+                str(block.get("text", "")) for block in content
+                if isinstance(block, dict) and block.get("type") == "text")
+        else:
+            text = ""
+        if text.strip():
+            lines.append(f"{role}：{text.strip()}")
+    return "\n\n".join(lines)
+
+
+def _split_transcript(text: str, max_chars: int = 6000) -> list[str]:
+    """按行把长记录切成若干段（不切在行中间）。"""
+    chunks: list[str] = []
+    current: list[str] = []
+    size = 0
+    for line in text.splitlines():
+        if size + len(line) + 1 > max_chars and current:
+            chunks.append("\n".join(current))
+            current, size = [], 0
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        chunks.append("\n".join(current))
+    return chunks or [""]
+
+
+def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
+    """面试评分：解析完整问答记录 → 逐题并行评分（分批发，遵守并发上限）→ 汇总报告。"""
+    role = str(args.get("role", "AI 技术岗")).strip() or "AI 技术岗"
+    transcript = str(args.get("transcript", "")).strip()
+    if not transcript:
+        source = str(args.get("transcript_file", "")).strip()
+        if not source:
+            # 什么都没提供（对话被压缩过是常见情况）→ 自动挑存档重建，
+            # 不让模型自己去啃几十 KB 的大文件（那会触发压缩死循环）。
+            # 链式压缩时最新的存档可能只剩摘要，所以在最近 6 份里优先挑"消息足够多"的那份
+            archives = sorted(ARCHIVE_DIR.glob("*.txt"))[-6:]
+            best = None
+            for path in reversed(archives):          # 从新到旧
+                try:
+                    if len(json.loads(path.read_text(encoding="utf-8"))) >= 20:
+                        best = path
+                        break
+                except Exception:
+                    continue
+            if best is None and archives:
+                best = archives[-1]                  # 都不够多就用最新的
+            if best is not None:
+                source = str(best)
+                print(f"  [workflow] 未提供记录——自动使用存档：{best.name}")
+        if source:
+            transcript = _render_transcript_file(source, int(args.get("tail", 80)))
+    if not transcript.strip():
+        raise WorkflowInputError(
+            "没有可用的问答记录——传 args.transcript（问答文本），"
+            "或传 args.transcript_file 指向 .transcripts/ 里的存档")
+
+    ctx.phase("解析")
+    # 分段解析：整段记录一次解析会超输出上限（实测 parse 输出被截断→"没有找到 JSON 对象"），
+    # 切成小段并行解析，长记录只保留最后 8 段（最近的面试内容在后面）
+    chunks = _split_transcript(transcript)[-WORKFLOW_MAX_PARALLEL:]
+    parsed_chunks = ctx.parallel([
+        (lambda chunk=chunk, index=index: ctx.agent(
+            f"把下面这段面试问答记录整理成结构化问答对（第 {index + 1}/{len(chunks)} 段；"
+            "面试官的追问和候选人的回答都要保留，一轮追问算一题）：\n\n" + chunk,
+            schema=INTERVIEW_QA_SCHEMA, label=f"parse:{index}"))
+        for index, chunk in enumerate(chunks)
+    ])
+    qa = [item for parsed in parsed_chunks for item in parsed.get("qa", [])]
+    if not qa:
+        # 解析不出内容时必须报错，绝不能拿空列表让汇总模型编一份假报告
+        raise WorkflowInputError(
+            "没能从记录里解析出任何问答对——记录可能为空或不是面试对话；"
+            "如果对话被压缩过，改用 transcript_file 指向 .transcripts/ 里最新的存档重试")
+
+    def score_answer(_value, item, index):
+        scored = ctx.agent(
+            f"你是{role}方向的资深面试官，给下面这道题的候选人回答打分"
+            f"（每个维度 0-10 的整数）：\n\n问题：{item['question']}\n\n"
+            f"候选人回答：{item['answer']}\n\n"
+            "evidence 字段必须引用候选人原话；suggestion 给具体改进建议。",
+            schema=INTERVIEW_SCORE_SCHEMA, label=f"score:{index}", phase="逐题评分")
+        return {"question": item["question"], **scored}
+
+    scored_questions: list = []
+    for start in range(0, len(qa), WORKFLOW_MAX_PARALLEL):  # 分批发，避免超过并发上限
+        batch = qa[start:start + WORKFLOW_MAX_PARALLEL]
+        scored_questions.extend(ctx.pipeline(batch, score_answer))
+
+    ctx.phase("汇总")
+    report = ctx.agent(
+        f"根据下面的逐题评分，汇总一份{role}模拟面试报告：给出总分、各维度均分、"
+        f"优势、短板和改进建议（建议要可执行、按优先级排序）：\n\n"
+        + json.dumps(scored_questions, ensure_ascii=False),
+        schema=INTERVIEW_REPORT_SCHEMA, label="summary")
+    return {**report, "per_question": scored_questions}
+
+
+register_workflow(
+    {"name": "interview-report",
+     "description": "面试评分：把完整问答记录（或 .transcripts/ 存档文件）解析成问答对，"
+                    "逐题并行评分，汇总成结构化面试报告",
+     "phases": ["解析", "逐题评分", "汇总"]},
+    _interview_report,
+)
+
+
+# -------- 面试记录存档（按候选人分档） --------
+INTERVIEWS_DIR = WORKDIR / ".interviews"
+
+
+def _interview_user_dir(user: str) -> pathlib.Path:
+    slug = _memory_slug(user) if user.strip() else "default"
+    root = INTERVIEWS_DIR.resolve()
+    path = (root / slug).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError(f"非法的候选人名字：{user}")
+    return path
+
+
+@beta_tool
+def save_interview_record(user: str, role: str, report: str) -> str:
+    """保存一场面试的记录（评分报告）到 .interviews/<候选人>/，用于回顾和进步追踪。
+    面试结束时调用；report 直接放 interview-report workflow 返回的 JSON 文本。
+
+    Args:
+        user: 候选人名字（多人共用时用来分档）。
+        role: 面试岗位方向，如 "AI/ML 工程师"。
+        report: 面试报告文本（JSON 会被解析后存档，其他文本原样存）。
+    """
+    try:
+        directory = _interview_user_dir(user)
+    except ValueError as error:
+        return f"错误：{error}"
+    directory.mkdir(parents=True, exist_ok=True)
+    overall = None
+    try:
+        parsed = json.loads(report)
+        stored = parsed if isinstance(parsed, dict) else {"text": report}
+        if isinstance(parsed, dict):
+            overall = parsed.get("overall")
+    except Exception:
+        stored = {"text": report}
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = directory / f"{stamp}.json"
+    path.write_text(json.dumps(
+        {"user": user, "role": role,
+         "saved_at": datetime.datetime.now().isoformat(timespec="seconds"),
+         "overall": overall, "report": stored},
+        ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  [interview] 已存档 {path.relative_to(WORKDIR)}")
+    return f"已保存面试记录：{path.name}（候选人 {user}，岗位 {role}）"
+
+
+@beta_tool
+def list_interviews(user: str = "") -> str:
+    """列出面试记录（按时间倒序）。用于回顾历史场次、对比进步。
+
+    Args:
+        user: 只看某个候选人的记录；留空则列出所有候选人。
+    """
+    if not INTERVIEWS_DIR.is_dir():
+        return "（还没有面试记录）"
+    if user.strip():
+        try:
+            directory = _interview_user_dir(user)
+        except ValueError as error:
+            return f"错误：{error}"
+        directories = [directory] if directory.is_dir() else []
+    else:
+        directories = [p for p in sorted(INTERVIEWS_DIR.iterdir()) if p.is_dir()]
+    lines = []
+    for directory in directories:
+        for path in sorted(directory.glob("*.json"), reverse=True):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                overall = payload.get("overall")
+                score = f" | 总分 {overall}" if overall is not None else ""
+                lines.append(f"{payload.get('saved_at', path.stem)} | {directory.name} | "
+                             f"{payload.get('role', '?')}{score}")
+            except Exception:
+                lines.append(f"{path.stem} | {directory.name} | （读取失败）")
+    return "\n".join(lines) if lines else "（还没有面试记录）"
+
+
 # ---------- 工具注册表 ----------
 # @beta_tool 装饰的对象自带 to_dict()（生成发送给模型的 schema）和 call()（带参数校验的执行）。
 TOOL_OBJECTS = [
@@ -2425,6 +2754,9 @@ TOOL_OBJECTS = [
     request_shutdown, create_worktree,
     connect_mcp,
     run_workflow,
+    search_questions,
+    save_interview_record,
+    list_interviews,
 ]
 TOOLS = [t.to_dict() for t in TOOL_OBJECTS]
 TOOL_HANDLERS = {t.name: t.call for t in TOOL_OBJECTS}
@@ -2550,6 +2882,10 @@ def permission_hook(block) -> str | None:
         if name in PROTECTED_FILES:
             print(f"⛔ 不允许写入/修改项目核心文件：{name}")
             return f"不允许写入/修改项目核心文件：{name}，请放弃此操作"
+        # 存档类目录（面试记录/记忆/会话）的写入免确认——"自动存档"不需要每次手动同意
+        parts = pathlib.PurePath(str(args.get("path", "")).replace("\\", "/")).parts
+        if any(part in (".interviews", ".memory", ".sessions") for part in parts):
+            return None
 
     # 外部工具（MCP）：宿主侧策略决定，不采信 server 自报的 readOnlyHint；
     # 未在策略里配置的一律按 confirm 处理
@@ -2611,7 +2947,7 @@ def summary_hook(messages: list) -> str | None:
     )
     delta = total - _LAST_TOOL_COUNT
     _LAST_TOOL_COUNT = total
-    if delta:
+    if delta > 0:  # 压缩/裁剪会让历史变短，delta 可能为负——负值不显示（曾出现"使用了 -3 次"）
         print(f"[HOOK] 本轮使用了 {delta} 次工具调用")
     return None  # 返回 None = 允许退出；返回字符串 = 强制再跑一轮
 
@@ -2635,7 +2971,9 @@ register_hook("Stop", _goal_stop_hook)  # s17：目标未完成时自动续轮
 ARCHIVE_DIR = WORKDIR / ".transcripts"
 TOOL_RESULTS_DIR = WORKDIR / ".task_outputs" / "tool-results"
 
-CONTEXT_CHAR_LIMIT = 50000        # 触发压缩的字符数阈值
+CONTEXT_CHAR_LIMIT = 150000       # 触发压缩的字符数阈值
+# 注：教程默认 50K；实测一次 60KB 的文件读取就会让整个会话进入"读什么都变指针"的压缩状态，
+# 反而逼出「指针追逐」死循环（演练事故），所以按实际模型上下文放宽到 150K。
 TOOL_RESULT_BUDGET = 200000       # 单批工具结果超过该字符数 → 开始转存
 LARGE_RESULT_CHAR_LIMIT = 30000   # 单个结果超过该字符数才值得转存
 MAX_MESSAGES = 50                 # 消息条数上限（超出即剪）
@@ -2667,8 +3005,14 @@ def _is_tool_result(message) -> bool:
 
 
 def _dump(messages) -> str:
-    """序列化消息（SDK 对象用 default=str 兜底），用于存档和估算大小。"""
+    """序列化消息（SDK 对象用 default=str 兜底），用于估算大小。"""
     return json.dumps(messages, default=str, ensure_ascii=False)
+
+
+def _archive_dump(messages) -> str:
+    """压缩器存档用的序列化：SDK 块转成 dict——存档必须能被程序重新读回来重建对话
+    （之前用 default=str 会存成对象 repr 字符串，只能给人看，没法复用）。"""
+    return json.dumps(_serialize_messages(messages), ensure_ascii=False, indent=1)
 
 
 class ContextCompactor:
@@ -2709,7 +3053,8 @@ class ContextCompactor:
             if len(text) <= LARGE_RESULT_CHAR_LIMIT:
                 continue
             path = self._save(TOOL_RESULTS_DIR, str(b.get("tool_use_id", "unknown")), text)
-            b["content"] = f"[完整结果已转存：{path}]\n{text[:2000]}"
+            b["content"] = (f"[完整结果已转存：{path}"
+                            "（用 read_file 分页读取，不要整读）]\n" + text[:2000])
             total = sum(len(str(x.get("content", ""))) for x in blocks)
         return messages
 
@@ -2726,7 +3071,7 @@ class ContextCompactor:
         if (tail_start > 0 and _is_tool_result(messages[tail_start])
                 and _has_tool_use(messages[tail_start - 1])):
             tail_start -= 1
-        path = self._save(ARCHIVE_DIR, f"snip-{_now()}", _dump(messages))
+        path = self._save(ARCHIVE_DIR, f"snip-{_now()}", _archive_dump(messages))
         marker = {"role": "user",
                   "content": f"[已归档 {tail_start - head_end} 条历史消息，完整记录：{path}]"}
         return [*messages[:head_end], marker, *messages[tail_start:]]
@@ -2746,7 +3091,8 @@ class ContextCompactor:
             if len(text) <= MIN_SNIP_LEN:
                 continue
             path = self._save(TOOL_RESULTS_DIR, str(b.get("tool_use_id", "unknown")), text)
-            b["content"] = f"[较早的工具结果已保存：{path}]"
+            b["content"] = (f"[较早的工具结果已保存：{path}]"
+                            "（需要内容时用 read_file 分页读取，不要整读大文件）")
         return messages
 
     # ---- 第 3.5 步：模型还没看过的结果本身太大 → 最大几条保留预览 + 路径 ----
@@ -2767,7 +3113,7 @@ class ContextCompactor:
 
     # ---- 第 4 步：仍然超限 → 让模型生成事实摘要（唯一会调用模型的步骤）----
     def compact_history(self, messages: list, active_request: str) -> list:
-        path = self._save(ARCHIVE_DIR, f"compact-{_now()}", _dump(messages))
+        path = self._save(ARCHIVE_DIR, f"compact-{_now()}", _archive_dump(messages))
         print(f"[auto compact] 完整历史已存档：{path}")
         summary = self._summarize(messages)
         if active_request:
@@ -2783,7 +3129,7 @@ class ContextCompactor:
         if (tail_start > 0 and _is_tool_result(messages[tail_start])
                 and _has_tool_use(messages[tail_start - 1])):
             tail_start -= 1
-        path = self._save(ARCHIVE_DIR, f"reactive-{_now()}", _dump(messages))
+        path = self._save(ARCHIVE_DIR, f"reactive-{_now()}", _archive_dump(messages))
         old = messages[:tail_start] if tail_start else messages
         summary = self._summarize(old)
         head = {"role": "user",
@@ -3064,7 +3410,7 @@ def _select_relevant_memories(messages: list) -> list[str]:
     )
     try:
         response = client.messages.create(
-            model=MODEL, messages=[{"role": "user", "content": prompt}], max_tokens=200)
+            model=AUX_MODEL, messages=[{"role": "user", "content": prompt}], max_tokens=200)
         indices = _extract_json_array(_message_text({"content": response.content}))
     except Exception:
         indices = []
@@ -3173,7 +3519,7 @@ def _extract_memories(messages: list) -> int:
     )
     try:
         response = client.messages.create(
-            model=MODEL, messages=[{"role": "user", "content": prompt}], max_tokens=1000)
+            model=AUX_MODEL, messages=[{"role": "user", "content": prompt}], max_tokens=1000)
         candidates = [
             validated
             for item in _extract_json_array(_message_text({"content": response.content}))
@@ -3292,7 +3638,8 @@ def agent_loop(
     while True:
         rounds += 1
         if rounds > max_rounds:
-            print(f"{prefix}（已达到最大工具轮数 {max_rounds}，停止）")
+            print(f"{prefix}（已达到最大工具轮数 {max_rounds}，停止——如果任务没完成，"
+                  "把当前进展和卡点如实告诉用户）")
             break
 
         # s08：每次请求前先跑压缩管线（大结果转存 / 剪消息 / 旧结果替换 / 摘要）
@@ -3310,6 +3657,8 @@ def agent_loop(
         printed_prefix = False  # 前缀（如「  [子任务] 」）只打一次，不能每个增量都打
         try:
             # 流式输出：正文增量到达即打印（text_stream 自动跳过 thinking 块）
+            # cache_control：DeepSeek 兼容端点支持 prompt caching——工具+system+历史会被缓存，
+            # 后续每轮命中缓存（实测输入 2483→56 token，延迟近乎减半），长对话提速的关键
             with client.messages.stream(
                 model=MODEL,
                 max_tokens=current_max_tokens,
@@ -3317,6 +3666,7 @@ def agent_loop(
                 system=system,
                 tools=round_tools,
                 messages=messages,
+                cache_control={"type": "ephemeral"},
             ) as stream:
                 for text in stream.text_stream:
                     if not printed_prefix:
@@ -3500,6 +3850,24 @@ def ask(question: str, messages: list) -> list:
 
 SESSION_DIR = WORKDIR / ".sessions"
 SESSION_FILE = SESSION_DIR / "latest.json"
+SESSION_USER = ""  # /user 设置的候选人名字（面试存档等场合用）
+
+
+def _user_notice() -> str:
+    """追加进对话的系统提示：让模型知道候选人是谁（/user 和 /clear 后都注入）。"""
+    return f"（系统提示：本次会话的候选人名字是「{SESSION_USER}」，面试存档等场合用这个名字）"
+
+
+def _handle_user_command(text: str) -> str | None:
+    """处理 /user 命令。设置名字时返回要追加进对话的系统提示，否则返回 None。"""
+    global SESSION_USER
+    name = text[len("/user"):].strip()
+    if not name:
+        print(f"[Session] 当前候选人：{SESSION_USER or '未设置（用 /user 名字 设置）'}")
+        return None
+    SESSION_USER = name
+    print(f"[Session] 候选人已设置：{name}")
+    return _user_notice()
 
 
 def _serialize_messages(messages: list) -> list:
@@ -3584,7 +3952,52 @@ def _clear_session() -> list:
     return []
 
 
+INPUT_JOIN_WINDOW = 0.8  # 交互模式下，多行在这段时间窗口内没有新输入就视为一条消息
 _input_queue: "queue.Queue[str | None]" = queue.Queue()
+
+
+def _pending_console_events() -> int:
+    """Windows 控制台里还有多少待处理的输入事件。
+    粘贴是分批"滴"进控制台的（间隔可能超过窗口）——只要还有事件排队就不该提交，
+    这是多行粘贴会被拆成多条消息的根治点。非 Windows / 非控制台时返回 0。"""
+    try:
+        import ctypes
+        import msvcrt
+        handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+        count = ctypes.c_ulong()
+        if ctypes.windll.kernel32.GetNumberOfConsoleInputEvents(handle, ctypes.byref(count)):
+            return int(count.value)
+    except Exception:
+        pass
+    return 0
+
+
+def _collect_input(first_line: str) -> str:
+    """把连续到达的多行合并成一条消息（多行粘贴/分段作答不再被拆成多条独立消息）。
+    判定：① 输入队列里还有行 → 继续收；② Windows 控制台还有待处理输入事件 → 继续等；
+    两者都没有且超过窗口 → 提交。管道/重定向输入（测试、脚本）保持逐行不变。"""
+    if not sys.stdin.isatty():
+        return first_line
+    lines = [first_line]
+    deadline = time.monotonic() + INPUT_JOIN_WINDOW
+    while True:
+        try:
+            nxt = _input_queue.get(timeout=0.1)
+        except queue.Empty:
+            if _pending_console_events() > 0:          # 粘贴还在滴入 → 继续等
+                deadline = time.monotonic() + INPUT_JOIN_WINDOW
+                continue
+            if time.monotonic() >= deadline:
+                break
+            continue
+        if nxt is None:
+            _input_queue.put(None)  # 放回哨兵，让主循环正常退出
+            break
+        lines.append(nxt)
+        deadline = time.monotonic() + INPUT_JOIN_WINDOW
+    if len(lines) > 1:
+        print(f"[输入] 已把连续输入的 {len(lines)} 行合并为一条消息")
+    return "\n".join(lines)
 
 
 def _stdin_reader_loop() -> None:
@@ -3603,9 +4016,11 @@ def chat_loop() -> None:
     start_runtime_threads()
     threading.Thread(target=_stdin_reader_loop, daemon=True).start()
     _STDIN_READER_STARTED = True
-    print("=== Agent 已就绪，输入问题开始对话（exit 退出，/clear 清空会话）===")
+    print("=== Agent 已就绪（exit 退出，/clear 清空会话，/user 名字 设置候选人）===")
     if session_history:
-        print(f"[Session] 已恢复上次会话：{len(session_history)} 条消息（/clear 可清空）")
+        print(f"[Session] 已恢复上次会话：{len(session_history)} 条消息")
+        print("[Session] 继续上次话题直接说；**开始新任务（如新一场面试）前建议先 /clear**，"
+              "否则模型会先去处理旧上下文残留（曾出现开场先去删临时文件的情况）")
     memory_count = len(_list_memories())
     if memory_count:
         print(f"[Memory] 记忆库已就绪：{memory_count} 条（.memory/）")
@@ -3638,17 +4053,26 @@ def chat_loop() -> None:
                 continue
             if line is None:
                 break
-            question = line.strip()
+            question = _collect_input(line).strip()
             if question.lower() in ("exit", "quit", "q", "退出"):
                 print("再见！")
                 break
             if not question:
                 continue
             prompt_visible = False
-            # 会话命令：/clear 清空本次会话（不动记忆库），/goal 设置目标
+            # 会话命令：/user 设置候选人，/clear 清空会话，/goal 设置目标
+            if question.startswith("/user"):
+                notice = _handle_user_command(question)
+                if notice:
+                    session_history.append({"role": "user", "content": notice})
+                    _save_session()
+                continue
             if question.lower() in ("/clear", "/new"):
                 session_history = _clear_session()
                 print("[Session] 已清空当前会话（长期记忆 .memory/ 不受影响）")
+                if SESSION_USER:  # 清空后补回候选人信息，不用再 /user 一次
+                    session_history.append({"role": "user", "content": _user_notice()})
+                    _save_session()
                 continue
             if question.startswith("/goal"):
                 condition = _handle_goal_command(question)

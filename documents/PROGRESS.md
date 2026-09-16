@@ -1,0 +1,118 @@
+# 项目进度
+
+> 最后更新：2026-09-16
+
+## 这是什么
+
+从零手写的一个 Claude Agent 运行时，外加一个跑在它上面的真实应用——**AI 模拟面试官**。
+
+- 运行时：[agent.py](../agent.py) 单文件，按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 教程 s01→s17 的路径逐章构建、集成
+- 应用：AI 技术岗模拟面试官（题库检索 → 追问式面试 → 评分报告 → 场次存档）
+- 相关仓库：[myagent](https://github.com/xunzhekafei/myagent)（完整版，本仓库）· [myagent-prototype](https://github.com/xunzhekafei/myagent-prototype)（面试功能之前的原型快照）
+
+模型通过 **Anthropic 官方 SDK** 调用，接口指向 **DeepSeek 的 Anthropic 兼容端点**（`https://api.deepseek.com/anthropic`），
+所以只需要一个 DeepSeek 密钥。`claude-opus-5` 会被映射到 `deepseek-v4-pro`。
+
+## 里程碑
+
+| 日期 | 阶段 | 产出 |
+| ---- | ---- | ---- |
+| 09-12 | 教程 s01~s17 全部实现 | 工具分发、权限、hooks、todo、子代理、技能、压缩、记忆、任务图、后台任务、cron、团队、MCP、workflow、目标循环 |
+| 09-12 | 工程化第一步 | 流式输出；测试套件（66 离线 + 2 冒烟） |
+| 09-13 | 会话持久化 | `.sessions/latest.json` 原子存档、SDK 对象序列化、半截回合清理 |
+| 09-15 | 面试官（数据层） | InterviewForge_GenDS 导入（1647 道 AI 岗题）+ `search_questions` 检索 |
+| 09-15 | 面试官（应用层） | 面试官技能、`interview-report` 评分 workflow、`.interviews/` 场次存档 |
+| 09-16 | 实战调试与修复 | 六项体验/稳定性修复（见「踩坑日志」）；测试达 98 个；发布 GitHub + MIT 许可 |
+
+## 当前能力
+
+**Agent 运行时**（32 个工具）：
+
+| 层 | 能力 |
+| --- | --- |
+| 内核 | 手动 agent 循环、流式输出、四类 hooks（UserPromptSubmit / PreToolUse / PostToolUse / Stop）、权限三道闸门 |
+| 基础工具 | 读写文件（**支持分页**）、glob、bash（超时/编码/截断保护）、计算、时间 |
+| 计划 | `todo`（会话内清单 + 防跑偏提醒）、`task` 任务图（依赖/认领/解锁，`.tasks/` 持久化） |
+| 知识 | 技能按需加载（`skills/*/SKILL.md`）、跨会话记忆（`.memory/`，中文二元组切词召回） |
+| 上下文 | 四步压缩管线（大结果落盘 → 剪消息 → 旧结果替换 → 模型摘要），压缩存档可重建对话 |
+| 异步 | 后台任务（`run_in_background` + 通知注入）、cron 定时任务（5 段表达式 + 持久化） |
+| 协作 | 子代理（一次性委派）、持久队友团队（收件箱总线、原子认领、任务目录、关机/计划协议） |
+| 编排 | Workflow 运行时（宿主注册脚本、`agent/parallel/pipeline` 原语、journal 断点续跑）、MCP 外部工具接入 |
+| 目标 | `/goal` 目标循环（独立判断器决定是否继续，不伪装完成） |
+| 会话 | `/user` 候选人、`/clear` 清空、退出自动存档、启动恢复 |
+
+**AI 模拟面试官**：
+
+- **题库**：`interview/data/ai_questions.json`——1647 道 AI 岗位题（AI/ML 工程师 / 数据科学家 / 数据分析师），
+  字段含关键词/类别/难度；`search_questions` 按英文关键词 + 类别/难度/岗位过滤
+- **面试官技能**：一次一题、追问上限、碎片输入处理、面试中不给反馈、结束触发评分
+- **评分**：`interview-report` workflow——记录分段并行解析 → 逐题并行评分（技术正确性/深度与原理/工程与场景思考/表达与结构）→ 汇总报告，**每个维度必须引用候选人原话作为证据**
+- **存档**：`.interviews/<候选人>/<时间戳>.json`，支持进步追踪
+
+## 关键选型（为什么这么做）
+
+| 决策 | 选择 | 理由 |
+| ---- | ---- | ---- |
+| 面试官建在哪 | **自建运行时**，不是 Coze / LangChain | 评分标准、追问策略、记录留存需要精细控制；本运行时已具备 skill / workflow / 结构化输出 / 存档等组件（实测 LangChain 的 `create_agent` 可用，但仅适合作为零件库做 RAG） |
+| 接口 | Anthropic SDK + DeepSeek 兼容端点 | SDK 生态成熟（流式、工具调用、**prompt caching**）；DeepSeek 便宜且国内可直连 |
+| 并行模型 | 线程（非 asyncio） | 本项目是同步代码库；子 agent 调用是网络等待，线程足够 |
+| worktree | 普通隔离目录（教学简化） | 项目非 git 仓库；真实实现应使用 git worktree，且注意它只是目录隔离、不是沙箱 |
+| 上下文压缩阈值 | 150K 字符（教程默认 50K） | 实测一次 60KB 的文件读取就会让会话进入"读什么都变指针"的压缩态 |
+| prompt caching | 主调用 + 队友调用全部开启 | 实测第二轮请求输入 2483→56 token，长对话提速最明显的杠杆 |
+
+## 踩坑与修复日志
+
+按「问题 → 根因 → 修复」记录，全部有测试回归覆盖：
+
+| 问题 | 根因 | 修复 |
+| ---- | ---- | ---- |
+| 工具调用报 400 | DeepSeek 兼容端点要求 `tool_result.content` 必须是字符串，返回数字即报错 | 工具统一 `str()` 返回 |
+| 中文命令输出乱码 | Windows 命令输出 GBK，按 UTF-8 解码失败 | UTF-8 优先、GBK 兜底 |
+| 权限确认卡死 | stdin 有两个消费者（输入线程 + `input()`），y/n 被抢走 | 权限确认与主循环共用同一输入队列 |
+| 中文记忆召回不工作 | 中文无空格，整句被当成一个词，无法匹配 | 二元组切词（相邻两字） |
+| 报告阶段 20 轮停摆 | 读 60KB 存档 → 超压缩阈值 → 被替换成路径指针 → 再读指针 → 无限追逐 | `read_file` 支持 `offset` 分页；阈值提高；指针消息附读取指引 |
+| 评分报"没有找到 JSON 对象" | 子 agent 的思考吃掉了输出配额，JSON 被截断 | 记录分段并行解析；workflow 子 agent 输出上限提高 |
+| 长报告存档失败 | 工具返回值在 6000 字符处截断（JSON 变成非法） | 上限提高到 20000 |
+| 面试官一次抛 3-4 个问题 | 技能示例本身是"两问"，示例比规则强势 | 全部示例改为单问 + "分多轮问"规则 + 题库原题拆分指引 |
+| 模型反复「请继续」、把半截答案当完成 | 输入线程按行读，整段粘贴被拆成多条消息 | 控制台事件探测 + 0.8s 窗口自动合并多行 |
+| 工具计数出现负数 | 压缩让历史变短，计数差值为负 | 负值不显示并重置基线 |
+| 面试开场先跑去删临时文件 | 恢复的会话把上次的调试现场带进新任务 | 恢复时提示先 `/clear`；技能加"开场前自检" |
+| GitHub 推送偶发失败 | `schannel: SSL/TLS handshake failed`（国内网络瞬断） | 重试即可 |
+
+## 测试与运行
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest            # 离线测试（98 个，不需要 API key，约 1 秒）
+python -m pytest -m slow    # 真实 API 冒烟测试（会消耗 token）
+python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
+```
+
+跑一场模拟面试：
+
+```
+你 > /user 你的名字
+你 > 开始面试
+（面试官按技能流程提问，一次一题、追问式深挖）
+你 > 结束面试        → 自动评分 + 存档
+```
+
+测试隔离：`tests/conftest.py` 的 `iso` fixture 把 `WORKDIR` 和所有产物目录指到临时目录，
+测试之间互不影响、也不碰真实文件。
+
+## 目录结构
+
+```
+agent.py              运行时本体（单文件）
+skills/               技能（code-review / deepseek-api / mock-interviewer）
+interview/            题库导入脚本与数据
+tests/                测试（98 离线 + 2 冒烟）
+documents/            文档（本文件）
+.sessions/ .memory/ .tasks/ .interviews/ .runtime/ .transcripts/   运行产物（已 gitignore）
+```
+
+## 下一步
+
+- **面试官打磨**：开场单问的落实验证；评分松紧校准；更多岗位题库
+- **可选增强**：语音面试（TTS/ASR，需外部服务）、Web UI、场次对比报告
+- **原型维护**：`myagent-prototype` 保持轻量，作为无面试功能的基线

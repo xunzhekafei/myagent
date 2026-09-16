@@ -1,15 +1,24 @@
-# myagent —— 你的第一个 Claude Agent
+# myagent —— 从零手写的 Claude Agent
 
-一个极简的 Python 智能体：把你的问题交给 Claude，它会在需要时调用
-你定义的工具（加法、查时间），直到给出最终答案。
+一个**从零构建的 Agent 运行时**（单文件 `agent.py`，32 个工具），外加一个跑在它上面的真实应用：
+**AI 技术岗模拟面试官**。按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)
+教程 s01→s17 逐章实现并集成——工具分发、权限、hooks、技能、压缩、记忆、任务图、后台任务、
+cron、团队协作、MCP、Workflow 编排、目标循环，全部挂在同一个循环上。
+
+模型通过 Anthropic 官方 SDK 调用，接口指向 **DeepSeek 的 Anthropic 兼容端点**，只需一个 DeepSeek 密钥。
+
+> 📋 **项目进度、架构决策与踩坑日志见 [documents/PROGRESS.md](documents/PROGRESS.md)**
 
 ## 目录结构
 
 | 文件                | 作用                                        |
 | ------------------- | ------------------------------------------- |
-| `agent.py`          | Agent 本体：系统提示词 + 工具定义 + 主循环   |
+| `agent.py`          | Agent 本体：循环 + 工具 + hooks + 各机制     |
 | `requirements.txt`  | 依赖清单（Anthropic SDK）                   |
 | `skills/`           | 技能目录：每个子目录一个 `SKILL.md`（按需加载的领域知识） |
+| `interview/`        | 面试题库导入脚本与数据                       |
+| `tests/`            | 测试（98 离线 + 2 冒烟）                     |
+| `documents/`        | 文档（进度、设计记录）                       |
 
 ## 快速开始
 

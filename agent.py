@@ -2471,7 +2471,7 @@ def search_questions(query: str, category: str = "", level: str = "", role: str 
     """从本地面试题库检索题目。岗位覆盖 AI 方向和前端方向，中英文题目都有。
     检索到英文题后自己翻译/改写成中文向候选人提问。
 
-    **面试时一定要带 role**，否则会跨岗位混题（前端题库有 5000 多道，会淹没 AI 题目）。
+    **面试时一定要带 role**，否则会跨岗位混题（前端题库有 6000 多道，会淹没 AI 题目）。
 
     Args:
         query: 关键词，中文（如 "Transformer 注意力机制"、"css 盒模型"）
@@ -2503,7 +2503,7 @@ def search_questions(query: str, category: str = "", level: str = "", role: str 
             continue
         # 只拿题干和关键词打分。role/category/stage 已经在上面当过滤器用过了，
         # 再参与打分会让筛选词反过来淹没结果：query 里只要有「前端」这个二元组，
-        # 该岗位下 5000 多道题全部命中得 1 分，真实匹配被稀释。
+        # 该岗位下几千道题全部命中得 1 分，真实匹配被稀释。
         score = sum(1 for term in terms
                     if term in f"{record.get('question','')} "
                                f"{' '.join(record.get('keywords', []))}".lower()) if terms else 1

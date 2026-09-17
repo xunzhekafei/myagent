@@ -24,6 +24,7 @@
 | 09-15 | 面试官（应用层） | 面试官技能、`interview-report` 评分 workflow、`.interviews/` 场次存档 |
 | 09-16 | 实战调试与修复 | 六项体验/稳定性修复（见「踩坑日志」）；测试达 98 个；发布 GitHub + MIT 许可 |
 | 09-17 | 岗位扩展到前端 | 导入 haizlin/fe-interview（5469 道前端题）；修掉检索打分的既有缺陷；测试达 108 个 |
+| 09-17 | 题库扩充到八个仓库 | 新增 ai-interview-guide 等 5 个来源（+1673 题，共 8990 题）；导入器改为参数化抽取；借鉴 ASu-skills 的追问方法论；测试达 112 个 |
 
 ## 当前能力
 
@@ -44,13 +45,13 @@
 
 **AI 模拟面试官**：
 
-- **题库**：`interview/data/` 共 **7317 道题、四个来源**——英文 1647 道来自 InterviewForge_GenDS（Hugging Face）；
-  中文 AI 岗 201 道从两个 MIT 仓库抽取（[ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide)
-  的面试八股文 + [FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) 的技术主题）；
-  前端 5469 道来自 [haizlin/fe-interview](https://github.com/haizlin/fe-interview)（按日期归档，自带分类标签，
-  另有 71 道按信号词标注为行为面）。导入器会**排除简历/招聘/个人日志等非技术目录**
-- **岗位**：AI 方向（AI/ML 工程师、数据科学家、数据分析师、AI Agent 开发、大模型算法工程师）
-  + 前端方向（前端工程师）；`search_questions` 支持中英文关键词 + 类别/岗位/阶段过滤
+- **题库**：`interview/data/` 共 **8990 道题、九个来源**（详见 README 的表）——
+  前端 6160 道（`fe_questions.json`）、AI 岗中文 1183 道（`zh_questions.json`）、
+  AI 岗英文 1647 道（`ai_questions.json`）。
+  导入器会**排除简历/招聘/个人面经/常用工具清单等非技术目录**，并按信号词标注行为面题目
+- **岗位**：AI 方向（AI 应用开发、AI/ML 工程师、数据科学家、数据分析师、AI Agent 开发、
+  大模型算法工程师）+ 前端方向（前端工程师）；`search_questions` 支持中英文关键词 +
+  类别/岗位/阶段过滤
 - **面试官技能**：一次一题、追问上限、碎片输入处理、面试中不给反馈、结束触发评分
 - **评分**：`interview-report` workflow——记录分段并行解析 → 逐题并行评分（技术正确性/深度与原理/工程与场景思考/表达与结构）→ 汇总报告，**每个维度必须引用候选人原话作为证据**
 - **存档**：`.interviews/<候选人>/<时间戳>.json`，支持进步追踪
@@ -67,6 +68,8 @@
 | prompt caching | 主调用 + 队友调用全部开启 | 实测第二轮请求输入 2483→56 token，长对话提速最明显的杠杆 |
 | 前端题库放哪 | **独立文件** `fe_questions.json` | 加载器本来就合并目录下所有 JSON，运行期与并进 `zh_questions.json` 等价；独立文件的价值在别处——5469 条的新增 diff 可审、两个导入器能各自重跑（导前端不必再克隆 AI 仓库）、README 的来源-许可表能一一对应 |
 | 行为题怎么标 | 导入时按信号词写进 `stage` 字段 | 前端的「软技能」分类是个杂物筐（1188 条混着技术题和闲聊）；`stage` 字段本来就在 schema 里且英文题库用了同一语义，标 71 道行为题让「至少一道行为面」的规则对两个岗位都能用 |
+| 题库抽取器怎么写 | 一个**参数化**函数 + `SOURCES` 里的键 | 后加入的 5 个仓库结构各异，但共同点是「某级标题行就是题目」。差异（glob 白名单、作题正则、分类来源、跳过目录、分类归一）全部用数据描述，不必一个仓库写一个抽取器；BAT 一个仓库两种标题格式也只多一条正则 |
+| ASu-skills 怎么用 | **只借鉴方法论，不装它的技能** | 它的 `interview` 技能与 `mock-interviewer` 职责重叠，且 `references/` 子目录不会被本项目 SkillLoader 自动加载、技能间还有交叉引用（`/great-resume` → `/make-resume`），装了要么失效要么让模型选错技能。只取四条：**提问前锁定评分契约**（定了就不因答得好坏而改）、**Claim 分类追问**（归属/指标/技术/架构/结果）、**按证据停止**（连着两次没新证据就推进）、**风险信号清单**。明确**不取**两条：卡住时给提示（与「面试中不给反馈」冲突）、不给精确总分（与现有总分制冲突） |
 
 ## 踩坑与修复日志
 
@@ -90,12 +93,17 @@
 | 前端岗传 `level="Level 1"` 一道都搜不到 | 中文题库没有 `level` 字段（全是空串），子串过滤直接全灭；技能却让从 Level 1 起步 | 检索落空时把题库**实际取值**回给模型；技能写明 `level` 只对英文题库有效，中文题靠提问方式控难度 |
 | 行为题标记把技术题也标上了 | 信号词里放了「管理」，命中「内存管理 / 状态管理 / 路由管理」 | 信号词收窄为团队/沟通/协作/离职/感悟等（`管理`、`失败`、`压力`、`冲突` 都因技术语境误报被剔除） |
 | 前端题库导入只有 5469 而非预估的 5477 | 噪音过滤 + 长度门槛 + `[代码]` 标记剥离各自削掉几条 | 逐条核对：`<6` 字的仅「我也要出题」（本就是噪音），真题无一误伤；数字以实际产出为准 |
+| 抽出的题干里混着 markdown 链接和源站标记 | 直接拿标题行当题干 | 先剥 `[文字](链接)` 再交给 `clean_title`——反过来会把 URL 里的 `-` 换成空格，留下「leetcode cn.com」这种残渣；再去掉「(常考)」「[易混淆]」类标记，且要求括号里**只有**标记词才匹配，免得误伤「（包括 Number、String）」这类正文 |
+| 同一个考点裂成两个分类 | FEGuide 用「javascript问题」、Front-End-Interview 用「JavaScript」 | `catmap` 归一化（JS 134 / CSS 108 / HTML 29 / 手写代码 31）；顺带发现 `h1`/`section` 两个分支曾提前 return 绕过 catmap，统一成「先算名字再过归一化」 |
+| 教程目录被当成题库抽出一堆章节名 | Front-End-Interview 的 `02.数据结构与算法` 用 `##` 当章节标题（「一、数组」「七、排序算法」），而其他目录的 `##` 才是真题目 | 按目录排除；同批排除 `09.面试复盘`（作者个人面经）、`13.实战篇`（常用工具清单：录屏 Loom / AdBlocker 插件） |
+| 技能里写「机器学习适用任何 AI 岗」是错的 | `category` 和 `role` 是绑定的——`机器学习` 只挂在 `大模型算法工程师` 下、`Python` 只挂在 `AI 应用开发` 下 | 技能改成显式说明这层绑定；检索落空时工具本就会回列该字段的实际取值，模型能自纠 |
+| 测试套件一度跑了 120 秒 | 虚惊——实测整套 5.1 秒（`import agent` 1.66s + 收集 2.36s 是固定开销），最慢的单个测试才 0.87s | 是新写入 1.9MB JSON 后 Windows Defender 在扫描，一次性；无性能退化 |
 
 ## 测试与运行
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest            # 离线测试（108 个，不需要 API key，约 1 秒）
+python -m pytest            # 离线测试（112 个，不需要 API key，约 2 秒）
 python -m pytest -m slow    # 真实 API 冒烟测试（会消耗 token）
 python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
 ```
@@ -118,7 +126,7 @@ python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
 agent.py              运行时本体（单文件）
 skills/               技能（code-review / deepseek-api / mock-interviewer）
 interview/            题库导入脚本与数据
-tests/                测试（108 离线 + 2 冒烟）
+tests/                测试（112 离线 + 2 冒烟）
 documents/            文档（本文件）
 .sessions/ .memory/ .tasks/ .interviews/ .runtime/ .transcripts/   运行产物（已 gitignore）
 ```

@@ -66,6 +66,53 @@ def test_real_bank_shape():
     assert all(record["question"] for record in records)
 
 
+# ---------- 多数据源加载 & 中文题库导入 ----------
+
+def test_bank_loads_multiple_json_files(iso):
+    """回归：题库加载器合并目录下所有 JSON（英文 InterviewForge + 中文 GitHub 题库）。"""
+    import agent
+    iso.QUESTION_BANK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    (iso.QUESTION_BANK_PATH.parent / "en.json").write_text(
+        json.dumps([FAKE_BANK[0]], ensure_ascii=False), encoding="utf-8")
+    (iso.QUESTION_BANK_PATH.parent / "zh.json").write_text(
+        json.dumps([{"question": "请讲讲「Transformer模型结构」的关键点", "keywords": [],
+                     "role": "大模型算法工程师", "category": "大模型应用基础", "level": "",
+                     "stage": "", "lang": "zh", "source": "test"}], ensure_ascii=False),
+        encoding="utf-8")
+    iso._QUESTION_CACHE = None
+
+    assert "deploy a model" in iso.search_questions.call({"query": "deployment latency"})
+    assert "Transformer模型结构" in iso.search_questions.call({"query": "Transformer 模型结构"})
+
+
+def test_importer_extraction_functions():
+    """导入器的解析函数（纯函数，无需网络）。"""
+    import sys as _sys
+    _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "interview"))
+    import import_github_bank as bank
+
+    markdown = """# 标题
+## 目录
+## 1. 什么是 AI Agent
+正文……
+### Q13：ReAct 三要素是什么？
+**A：** ……
+## 8. 综合面试题库（15+ 题）
+### Q14：如何设计停止条件？
+"""
+    questions = bank.extract_from_agent_guide(markdown)
+    assert "什么是 AI Agent" in questions
+    assert "ReAct 三要素是什么？" in questions
+    assert all("目录" not in q and "综合面试题库" not in q for q in questions)   # 小节标题不算题
+
+    assert bank.question_from_filename("Transformer模型结构.md") == \
+        "请讲讲「Transformer模型结构」的关键点，并结合实际场景举例。"
+    assert bank.question_from_filename("README.md") == ""            # 元文件被过滤
+    assert bank.question_from_filename("Accelerate 使用进阶.md") == ""
+    assert bank.question_from_filename("什么是RAG.md").endswith("？")
+    assert bank.category_from_path(pathlib.Path("1-大模型应用基础/x.md")) == "大模型应用基础"
+
+
 # ---------- 面试评分 workflow ----------
 
 def _stub_interview_runner(calls, question_count=2):

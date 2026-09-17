@@ -2434,31 +2434,37 @@ _QUESTION_CACHE: list | None = None
 
 
 def _load_question_bank() -> list:
+    """加载题库目录下所有 *.json（多数据源：英文 InterviewForge + 中文 GitHub 题库）。"""
     global _QUESTION_CACHE
     if _QUESTION_CACHE is None:
-        if not QUESTION_BANK_PATH.is_file():
-            _QUESTION_CACHE = []
-        else:
+        records: list = []
+        bank_dir = QUESTION_BANK_PATH.parent
+        files = sorted(bank_dir.glob("*.json")) if bank_dir.is_dir() else []
+        for path in files:
             try:
-                _QUESTION_CACHE = json.loads(QUESTION_BANK_PATH.read_text(encoding="utf-8"))
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    records.extend(data)
             except Exception as error:
-                print(f"[题库] 读取失败：{error}")
-                _QUESTION_CACHE = []
+                print(f"[题库] {path.name} 读取失败：{error}")
+        _QUESTION_CACHE = records
+        if records:
+            print(f"[题库] 已加载 {len(records)} 道题（{len(files)} 个数据文件）")
     return _QUESTION_CACHE
 
 
 @beta_tool
 def search_questions(query: str, category: str = "", level: str = "", role: str = "",
                      limit: int = 5) -> str:
-    """从本地面试题库检索题目（AI 岗位：AI/ML 工程师、数据科学家、数据分析师）。
-    注意：题库原文是英文，query 必须用英文关键词（如 "model deployment latency"），
-    检索到之后你自己翻译/改写成中文向候选人提问。
+    """从本地面试题库检索题目（AI 岗位：AI/ML 工程师、数据科学家、数据分析师、AI Agent 开发）。
+    题库含**英文和中文两个来源**：query 用中文或英文关键词都可以，各自匹配对应语言的题目；
+    英文题检索到之后自己翻译/改写成中文向候选人提问。
 
     Args:
-        query: 英文关键词，如 "model deployment latency"、"feature engineering"、"bias variance"。
-        category: 类别过滤（子串匹配），如 "System Design"、"Coding"。
-        level: 难度过滤，如 "Level 1"（基础）/ "Level 2"（实战）/ "Level 3"（边界与冲突）。
-        role: 岗位过滤，如 "AI/ML"、"Data Scientist"、 "Data Analyst"。
+        query: 关键词，中文（如 "Transformer 注意力机制"）或英文（如 "model deployment latency"）均可。
+        category: 类别过滤（子串匹配），如 "System Design"、"RAG技术"、"高效微调篇"。
+        level: 难度过滤，如 "Level 1"（英文题库有难度标注）。
+        role: 岗位过滤，如 "AI/ML"、"Data Scientist"、"AI Agent 开发"。
         limit: 返回条数（默认 5，最多 10）。
     """
     bank = _load_question_bank()
@@ -2480,9 +2486,9 @@ def search_questions(query: str, category: str = "", level: str = "", role: str 
         if score:
             candidates.append((score, record))
     if not candidates:
-        hint = ""
-        if re.search(r"[一-鿿]", query):  # 中文查询必然搜不到英文题库，给出自我纠正提示
-            hint = "（提示：题库是英文的，请改用英文关键词重新检索，例如 'model deployment'、'feature engineering'）"
+        hint = ("（换个更具体的关键词，或改用英文关键词试试：题库里中英文题目都有）"
+                if re.search(r"[一-鿿]", query) else
+                "（换个更具体的关键词，或改用中文关键词试试：题库里中英文题目都有）")
         return (f"没有找到匹配的题目（query={query!r} category={category!r} "
                 f"level={level!r} role={role!r}）{hint}")
     candidates.sort(key=lambda item: -item[0])

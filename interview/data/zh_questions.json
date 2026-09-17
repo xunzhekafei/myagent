@@ -1,0 +1,2012 @@
+[
+ {
+  "question": "什么是 AI Agent",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent vs LLM Chain vs ChatBot",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 的核心组成",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 的工作流程",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 的分类",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 的应用场景",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 的挑战与局限",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "请用你自己的话定义 LLM Agent，并说明与单次调用的差异。",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "ReAct 框架里三个字母代表什么？解决什么问题？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你会如何设计 Agent 的停止条件？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "工具描述（tool description）为什么非常重要？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Memory 用向量库就够了吗？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "多 Agent 协作和单 Agent 多工具怎么选？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如何做「人在回路」又不打断体验？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 日志应记录什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "为什么「让模型自己选工具」可能不如「路由器 + 规则」？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "简述 Planner Executor 架构及优缺点。",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 如何做版本管理与灰度？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "举一个「不是 Agent 但常被误认为 Agent」的例子。",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你如何向非技术经理解释 Agent 的风险？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "上下文窗口越来越大，还需要外部记忆吗？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如何测试 Agent？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "ReAct 框架（重点中的重点）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Plan and Execute 框架",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Reflexion 框架",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "LATS（Language Agent Tree Search）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "LangChain Agent 实现",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "LangGraph 状态机",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "AutoGen / CrewAI 等多 Agent 框架",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "模块综合：15+ 道高频面试题速查",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "文档解析与预处理",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "文档分块策略（Chunking）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "向量化（Embedding）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "重排序（Reranking）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "RAG 高级模式",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "RAG 生产优化",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Function Calling 基础",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Tool Use / Tool Calling",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "MCP 协议（Model Context Protocol）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "工具路由（Tool Routing）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "工具编排（Tool Orchestration）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "常见工具实现",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "综合面试题精选（≥15 题）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Function Calling 和「让模型输出 JSON」有什么本质区别？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "描述 OpenAI 兼容接口里 tool_calls 与 tool 消息的对应关系。",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "为什么工具 description 比函数名更重要？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如何设计 JSON Schema 降低模型填错概率？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "LangChain Tool 的 docstring 为什么要写「何时不要用」？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "MCP 解决的主要痛点是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "MCP 与 Function Calling 是替代关系吗？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "工具路由什么时候必须上？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "向量路由的缺陷与改进？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "并行工具调用要注意什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "什么是工具编排中的「依赖 DAG」？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "敏感操作为什么推荐「两阶段提交」式工具设计？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "工具返回为什么要尽量结构化（JSON）？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如何做工具调用的权限控制？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "代码执行工具如何做到基本安全？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "记忆系统概述",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "短期记忆（Short term / Working Memory）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "长期记忆（Long term Memory）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "会话摘要与压缩",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "情景记忆与语义记忆",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "记忆检索策略",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "高级记忆框架",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "记忆在生产中的挑战",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "为什么需要多智能体",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "三大协作模式",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "任务分配策略",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "状态管理与同步",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "主流多 Agent 框架",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "多 Agent 在企业中的应用",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Transformer 架构",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "注意力机制详解",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Tokenization",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "前沿模型与选型",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "模型路由与容错",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Token 成本控制",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "全链路可观测性",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "幻觉问题的工程解决方案",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Prompt Engineering 基础",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Prompt 设计原则",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Few shot Learning",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Chain of Thought（CoT）思维链",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "自我反思 Prompt",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "System Prompt 设计",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Prompt 注入与防御",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Prompt 优化技巧",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 中的核心 Prompt 模板",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试八股文",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "为什么选择 ReAct 模式而不是 Plan and Execute？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "为什么采用多路检索而不是单一向量检索？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 编排器是怎么设计的？为什么这样设计？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "多 Agent 协作和单 Agent 有什么区别？你怎么选择？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "意图识别模块是怎么实现的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "为什么选择 Milvus 而不是其他向量数据库？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "系统的可扩展性是怎么设计的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如果让你重新设计这个系统，你会怎么改进？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你的系统能支持多少并发？怎么评估的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "为什么要做模型路由？直接用一个模型不行吗？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么设计的对话管理和上下文维护？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你的系统支持哪些模型？怎么做模型适配的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如何处理长文档输入？上下文窗口不够怎么办？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "系统的安全架构是怎么设计的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你怎么看待 MCP（Model Context Protocol）？在你的系统中是怎么使用的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如何设计 Agent 的错误恢复和重试机制？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你的系统支持多租户吗？怎么实现的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你怎么看 Agent 架构的未来发展？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "向量数据库是怎么选型的？分块策略是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "ReAct 的 Prompt 是怎么设计的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "熔断器是怎么实现的？三个状态是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "记忆系统的短期和长期记忆是怎么配合的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "文档解析支持哪些格式？怎么处理表格和图片？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "重排序是怎么做的？用的什么模型？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Function Calling 和 MCP 有什么区别？你怎么选的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "会话摘要压缩的阈值是多少？怎么确定的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "RRF 融合排序的公式是什么？权重怎么调？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "嵌入模型用的什么？维度多少？怎么选的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Guardrails（护栏）是怎么实现的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么实现的 Streaming 流式输出？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的日志和链路追踪？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的异步并行处理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "知识图谱是怎么构建和使用的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的 A/B 测试和 Prompt 版本管理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Token 计数和费用统计是怎么实现的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的数据预处理和数据清洗？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Token 成本是怎么控制的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "延迟优化做了哪些措施？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "缓存策略是什么？命中率多少？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "流式输出是怎么实现的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "异步处理在哪些地方使用了？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "数据库查询是怎么优化的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "模型推理速度是怎么优化的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "前端渲染性能怎么优化？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "冷启动问题是怎么解决的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "网络传输是怎么优化的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Embedding 计算是怎么优化的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的资源监控和自动扩缩容？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Agent 死循环怎么检测和防止的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "模型幻觉怎么控制的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "模型超时怎么处理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "检索结果不准确怎么办？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "工具调用失败怎么处理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "多 Agent 之间通信失败怎么处理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "知识库数据不一致怎么处理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "高并发下的限流降级策略是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "数据丢失和恢复策略是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "模型输出格式异常怎么处理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "敏感信息泄露怎么防止？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "系统容量规划是怎么做的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的测试？覆盖率多少？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的监控和告警？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么部署的？CI/CD 是什么流程？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "日志系统怎么设计的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "安全性怎么保证的？（Prompt 注入等）",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "代码质量是怎么保证的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "文档是怎么维护的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的版本管理和发布管理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做技术债务管理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "如何做的性能基准测试？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "怎么做的配置管理？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "团队协作和知识共享是怎么做的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你的系统解决了什么业务问题？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "用户反馈怎么样？怎么收集和处理的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你觉得 AI Agent 在企业中的价值是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "和竞品相比你们的优势是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "下一步的技术规划是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "你在项目中的角色是什么？最大的贡献是什么？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "项目中遇到的最大挑战是什么？怎么解决的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "这个项目的 ROI 是怎么计算的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Transformer 的 Self Attention 怎么计算？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "LoRA 的原理是什么？为什么低秩有效？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "RAG 和微调怎么选？各自优劣？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "KV Cache 是什么？为什么需要？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "RLHF 和 DPO 的区别？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Embedding 模型是怎么训练的？对比学习怎么做的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "向量数据库的索引原理是什么？HNSW 怎么工作的？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "Prompt Engineering 有哪些关键技巧？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "大模型的 Context Window 限制怎么突破？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "LLM 的解码策略有哪些？Temperature 和 Top p 怎么影响输出？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "什么是 Agent 的工具学习（Tool Learning）？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "什么是 Mixture of Experts（MoE）？为什么重要？",
+  "keywords": [],
+  "role": "AI Agent 开发",
+  "category": "面试问答集",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "bcefghj/ai-agent-interview-guide"
+ },
+ {
+  "question": "请讲讲「CNN卷积神经网络基础」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「GPT&Bert&T5」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「PyTorch搭建神经网络」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「RNN循环神经网络基础」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「tensorflow」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「Transformer模型结构」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「Yolo基础知识」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「向量数据库」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「大模型的泛化能力」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「聚类.分类_算法」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「训练与推理」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型应用基础",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「LLM_Fine_Tuning」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "fine_tune",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「微调优化」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "大模型优化技术",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「DeepSpeed」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "分布式训练篇",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「Lora 原理与实战」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "高效微调篇",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「LoRA..ETC」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "高效微调篇",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「P Tuning 原理与实战」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "高效微调篇",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「Prefix Tuning 原理与实战」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "高效微调篇",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「Prompt Tuning原理与实战」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "高效微调篇",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ },
+ {
+  "question": "请讲讲「Pytorch&DeepSpeed」的关键点，并结合实际场景举例。",
+  "keywords": [],
+  "role": "大模型算法工程师",
+  "category": "pytorch",
+  "level": "",
+  "stage": "",
+  "lang": "zh",
+  "source": "aceliuchanghong/FAQ_Of_LLM_Interview"
+ }
+]

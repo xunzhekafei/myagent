@@ -43,8 +43,10 @@
 
 **AI 模拟面试官**：
 
-- **题库**：`interview/data/ai_questions.json`——1647 道 AI 岗位题（AI/ML 工程师 / 数据科学家 / 数据分析师），
-  字段含关键词/类别/难度；`search_questions` 按英文关键词 + 类别/难度/岗位过滤
+- **题库**：`interview/data/` 共 **1848 道题、中英双源**——英文 1647 道来自 InterviewForge_GenDS（Hugging Face），
+  中文 201 道从两个 MIT 仓库抽取（[ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide)
+  的面试八股文 + [FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) 的技术主题）；
+  `search_questions` 支持中英文关键词 + 类别/难度/岗位过滤。导入器会**排除简历/招聘/个人日志等非技术目录**
 - **面试官技能**：一次一题、追问上限、碎片输入处理、面试中不给反馈、结束触发评分
 - **评分**：`interview-report` workflow——记录分段并行解析 → 逐题并行评分（技术正确性/深度与原理/工程与场景思考/表达与结构）→ 汇总报告，**每个维度必须引用候选人原话作为证据**
 - **存档**：`.interviews/<候选人>/<时间戳>.json`，支持进步追踪

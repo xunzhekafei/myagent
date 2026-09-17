@@ -349,19 +349,26 @@ Lead、一次性 subagent、队友的工具调用**都先经过 `PreToolUse`**�
 
 ## 面试题库（AI 模拟面试官 · 数据层）
 
-数据来自 **InterviewForge_GenDS**（Hugging Face，MIT 许可）：1647 道 AI 岗位题
-（AI/ML 工程师 576 / 数据分析师 576 / 数据科学家 495），字段含 question/keywords/category/level/role。
-原题是**英文且没有参考答案**——对模拟面试反而好（不泄题），面试官检索后用中文改写提问。
+题库共 **1848 道题**，两个来源（都只导入题目、不含答案——对模拟面试反而好，不泄题）：
+
+| 来源 | 题数 | 语言 | 许可 |
+| ---- | ---- | ---- | ---- |
+| [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS) | 1647 | 英文 | MIT |
+| [bcefghj/ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide) | 181 | 中文 | MIT |
+| [aceliuchanghong/FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) | 20 | 中文 | MIT |
 
 ```bash
-# 导入（huggingface.co 直连不通时用 hf-mirror 镜像）
+# 导入英文题库（huggingface.co 直连不通时用 hf-mirror 镜像）
 curl -L -o /tmp/interview_forge.csv \
   https://hf-mirror.com/datasets/Davichick/InterviewForge_GenDS/resolve/main/interview_forge_v3_complete.csv
 python interview/import_dataset.py /tmp/interview_forge.csv
+
+# 导入中文题库（浅克隆两个 MIT 仓库并抽取；简历/招聘/个人日志等目录已排除）
+python interview/import_github_bank.py
 ```
 
-`search_questions(query, category, level, role, limit)`：**query 要用英文关键词**
-（如 `model deployment latency`），支持类别/难度/岗位过滤；中文查询会返回自我纠正提示。
+`search_questions(query, category, level, role, limit)`：**中文或英文关键词都可以**，
+各自匹配对应语言的题目；支持类别/难度/岗位过滤。英文题检索到后由面试官翻译/改写成中文提问。
 
 ## AI 模拟面试官
 

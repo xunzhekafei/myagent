@@ -1,5 +1,7 @@
 # myagent —— 从零手写的 Claude Agent
 
+[![tests](https://github.com/xunzhekafei/myagent/actions/workflows/tests.yml/badge.svg)](https://github.com/xunzhekafei/myagent/actions/workflows/tests.yml)
+
 一个**从零构建的 Agent 运行时**（单文件 `agent.py`，32 个工具），外加一个跑在它上面的真实应用：
 **技术岗模拟面试官**（AI 方向 + 前端方向，题库 7317 道）。按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)
 教程 s01→s17 逐章实现并集成——工具分发、权限、hooks、技能、压缩、记忆、任务图、后台任务、
@@ -420,6 +422,11 @@ python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
 
 隔离方式：`tests/conftest.py` 的 `iso` fixture 把 `WORKDIR` 和所有产物目录指到临时目录，
 并清空模块级全局——测试之间互不影响，也不会碰真实项目文件。
+
+CI（[.github/workflows/tests.yml](.github/workflows/tests.yml)）在 push 和 PR 时跑上面这套离线测试，
+Ubuntu 与 Windows 双平台——本项目在 Windows 上开发，`agent.py` 里有 GBK 解码等平台相关分支。
+**不需要配置任何密钥**：`slow` 标记的冒烟测试被默认排除，`conftest.py` 会给
+`ANTHROPIC_API_KEY` 兜一个假值。
 
 ## 权限控制（三道闸门）
 

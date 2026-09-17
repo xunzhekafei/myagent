@@ -3,12 +3,14 @@
 来源（均为 MIT 许可；本文件只导入题目、不复制答案，来源标注在数据与 README 中）：
   - bcefghj/ai-agent-interview-guide      AI Agent 面试八股文（有 Q&A 结构，抽取质量高）
   - aceliuchanghong/FAQ_Of_LLM_Interview  大模型算法岗 FAQ（笔记型，用文件名/标题作题）
+  - haizlin/fe-interview                  前端面试每日 3+1（按日期归档，history.md 自带分类标签）
 
 用法：
   python interview/import_github_bank.py          # 浅克隆到临时目录并导入
   python interview/import_github_bank.py --fresh  # 忽略已有克隆，重新拉取
 
-产物：interview/data/zh_questions.json（统一 schema，带 source/lang 字段）
+产物：interview/data/zh_questions.json（AI 岗中文题）
+      interview/data/fe_questions.json（前端岗，题量约 5400）
 """
 import json
 import pathlib
@@ -18,20 +20,7 @@ import sys
 import tempfile
 
 DATA_DIR = pathlib.Path(__file__).parent / "data"
-OUT_PATH = DATA_DIR / "zh_questions.json"
 CLONE_ROOT = pathlib.Path(tempfile.gettempdir()) / "interview_banks"
-
-SOURCES = [
-    {"repo": "bcefghj/ai-agent-interview-guide", "dir": "ai-agent-guide",
-     "role": "AI Agent 开发",
-     # 白名单：只取技术内容；排除 学习路线图/企业招聘/简历模板/STAR面试稿 等求职向目录
-     "include": ("docs/01-面试八股文", "docs/06-面试问答集")},
-    {"repo": "aceliuchanghong/FAQ_Of_LLM_Interview", "dir": "llm-faq",
-     "role": "大模型算法工程师",
-     # 白名单：技术各篇；排除 3-面试问题记录（作者个人求职日志）/thoughts/using_files
-     "include": ("1-大模型应用基础", "2-大模型优化技术", "4-分布式训练篇",
-                 "5-高效微调篇", "6-强化学习基础", "pytorch")},
-]
 
 # 看起来像问题的标题（真正的疑问词才算；"原理/介绍"是主题词，不算）
 QUESTION_HINTS = ("什么", "为什么", "如何", "怎么", "怎样", "区别", "是否", "哪些", "？", "?")
@@ -39,6 +28,32 @@ QUESTION_HINTS = ("什么", "为什么", "如何", "怎么", "怎样", "区别",
 # 元文件/操作性文件名——不是面试主题，跳过
 META_HINTS = ("readme", "使用", "入门", "基本用法", "基本操作", "编写", "代码",
               "参数解释", "说明", "进阶", "tutorial", "guide", "环境配置")
+
+# ---------- fe-interview 专用 ----------
+
+# history.md 的每行带分类标签：`- [ECMAScript] [题干](issue链接)`
+FE_TAGGED_LINE = re.compile(r"^\s*-\s*\[([^\]]+)\]\s*\[(.*)\]\((https?://\S+)\)\s*$")
+# 其余 8 个文件没有标签：`- [题干](issue链接)`，分类取文件名
+FE_PLAIN_LINE = re.compile(r"^\s*-\s*\[(.+?)\]\((https?://\S+)\)\s*$")
+
+# 其余文件的文件名 → history.md 的分类名（避免同一个主题裂成两个分类）
+FE_CATEGORY_ALIAS = {"nodejs": "NodeJs", "skill": "软技能", "ecmascript": "ECMAScript"}
+
+# 源站的「本题含代码块」标记，不是题干的一部分，提问时要去掉
+FE_CODE_MARK = re.compile(r"\s*\[代码\]\s*")
+
+# 行为/软技能题的信号词——命中就把 stage 标成行为面，供面试官按 stage 过滤
+# （英文题库的行为面是 "Stage 3: Team Fit & Scenario Handling"，这里沿用同一取值）
+# 用词要窄：像「管理」「失败」「压力」「冲突」这类看似行为、实则大量出现在技术题里
+# （内存管理 / promise 失败重试 / 压力测试 / 端口冲突），命中即误标，不能用。
+FE_BEHAVIOR_HINTS = ("团队", "沟通", "协作", "跨部门", "合作", "向上汇报",
+                     "职业规划", "为什么离职", "离职", "感悟",
+                     "如何看待", "你怎么看", "意见不合", "带人", "作为管理者")
+FE_BEHAVIOR_STAGE = "Stage 3: Team Fit & Scenario Handling"
+
+# 明显不是面试题的闲聊（人工抽查 5370 题后确认的少数几条）
+FE_NOISE = ("我也要出题", "你会开车吗", "你喜欢跑步吗", "你喜欢爬山吗",
+            "你平时熬夜吗", "你有什么爱好", "薅羊毛", "玩手机")
 
 
 def clean_title(text: str) -> str:
@@ -122,39 +137,121 @@ def clone(repo: str, target: pathlib.Path, fresh: bool = False) -> pathlib.Path:
     return target
 
 
+# ---------- 各数据源的抽取器 ----------
+# 签名统一为 (root, source, ctx) -> list[record]；ctx 持有跨文件去重集合：
+#   ctx["text"]  AI 岗两个源共用的题干去重（保持原有行为）
+#   ctx["url"]   前端题库按 issue 链接去重
+
+def _wanted(md: pathlib.Path, root: pathlib.Path, source: dict) -> bool:
+    rel = md.relative_to(root).as_posix()
+    return any(rel.startswith(prefix) for prefix in source.get("include", ()))
+
+
+def _extract_agent_guide(root: pathlib.Path, source: dict, ctx: dict) -> list[dict]:
+    entries: list[dict] = []
+    for md in sorted(root.glob("docs/**/*.md")):
+        if not _wanted(md, root, source):
+            continue
+        text = md.read_text(encoding="utf-8", errors="replace")
+        entries += build_entries(extract_from_agent_guide(text), source["role"],
+                                 category_from_path(md.relative_to(root)),
+                                 source["repo"], ctx["text"])
+    return entries
+
+
+def _extract_llm_faq(root: pathlib.Path, source: dict, ctx: dict) -> list[dict]:
+    entries: list[dict] = []
+    for md in sorted(root.glob("**/*.md")):
+        if not _wanted(md, root, source):
+            continue
+        if any(part.startswith(".") for part in md.relative_to(root).parts):
+            continue
+        question = question_from_filename(md.name)
+        entries += build_entries([question], source["role"],
+                                 category_from_path(md.relative_to(root)),
+                                 source["repo"], ctx["text"])
+    return entries
+
+
+def _extract_fe_interview(root: pathlib.Path, source: dict, ctx: dict) -> list[dict]:
+    """抽取 haizlin/fe-interview 的 category/*.md。
+
+    history.md 覆盖最全（第 1 天 2019-04 起全部题目，按日期倒序）且每行自带分类标签，
+    其余 8 个文件与它重叠 96%、只补 100 余道，分类取文件名。所以先跑 history.md，
+    再用其余文件补缺；按 issue 链接去重——同一道题在不同文件里有 2318 处措辞不同，
+    先跑的那个版本胜出（history.md 的措辞更新，也是想要的）。
+    """
+    category_dir = root / "category"
+    if not category_dir.is_dir():
+        return []
+    entries: list[dict] = []
+    ordered = sorted(category_dir.glob("*.md"), key=lambda p: p.name != "history.md")
+    for md in ordered:
+        tagged = md.name == "history.md"
+        fallback_category = FE_CATEGORY_ALIAS.get(md.stem.lower(), md.stem)
+        for line in md.read_text(encoding="utf-8", errors="replace").splitlines():
+            match = FE_TAGGED_LINE.match(line) if tagged else FE_PLAIN_LINE.match(line)
+            if not match:
+                continue
+            if tagged:
+                category, question, url = match.group(1), match.group(2), match.group(3)
+            else:
+                category, question, url = fallback_category, match.group(1), match.group(2)
+            if url in ctx["url"]:
+                continue
+            ctx["url"].add(url)          # 先认领：同一 issue 只取优先级最高文件里的措辞
+            question = " ".join(FE_CODE_MARK.sub(" ", question).split())
+            if len(question) < 6 or any(hint in question for hint in FE_NOISE):
+                continue
+            entries.append({
+                "question": question,
+                "keywords": [],
+                "role": source["role"],
+                "category": category,
+                "level": "",
+                "stage": FE_BEHAVIOR_STAGE if any(h in question for h in FE_BEHAVIOR_HINTS) else "",
+                "lang": "zh",
+                "source": source["repo"],
+                "url": url,
+            })
+    return entries
+
+
+SOURCES = [
+    {"repo": "bcefghj/ai-agent-interview-guide", "dir": "ai-agent-guide",
+     "role": "AI Agent 开发", "out": "zh_questions.json",
+     # 白名单：只取技术内容；排除 学习路线图/企业招聘/简历模板/STAR面试稿 等求职向目录
+     "include": ("docs/01-面试八股文", "docs/06-面试问答集"),
+     "extract": _extract_agent_guide},
+    {"repo": "aceliuchanghong/FAQ_Of_LLM_Interview", "dir": "llm-faq",
+     "role": "大模型算法工程师", "out": "zh_questions.json",
+     # 白名单：技术各篇；排除 3-面试问题记录（作者个人求职日志）/thoughts/using_files
+     "include": ("1-大模型应用基础", "2-大模型优化技术", "4-分布式训练篇",
+                 "5-高效微调篇", "6-强化学习基础", "pytorch"),
+     "extract": _extract_llm_faq},
+    {"repo": "haizlin/fe-interview", "dir": "fe-interview",
+     "role": "前端工程师", "out": "fe_questions.json",
+     "extract": _extract_fe_interview},
+]
+
+
 def main(fresh: bool = False) -> None:
-    all_entries: list[dict] = []
-    seen: set = set()
+    ctx = {"text": set(), "url": set()}
+    outputs: dict[str, list] = {}
     for source in SOURCES:
         root = clone(source["repo"], CLONE_ROOT / source["dir"], fresh)
-        entries = []
+        entries = source["extract"](root, source, ctx)
+        outputs.setdefault(source["out"], []).extend(entries)
+        categories = sorted({entry["category"] for entry in entries})
+        print(f"  {source['repo']}: {len(entries)} 题"
+              f"（分类：{'、'.join(categories)}）")
 
-        def wanted(md: pathlib.Path) -> bool:
-            rel = md.relative_to(root).as_posix()
-            return any(rel.startswith(prefix) for prefix in source["include"])
-
-        if source["dir"] == "ai-agent-guide":
-            for md in sorted(root.glob("docs/**/*.md")):
-                if not wanted(md):
-                    continue
-                text = md.read_text(encoding="utf-8", errors="replace")
-                entries += build_entries(extract_from_agent_guide(text), source["role"],
-                                         category_from_path(md.relative_to(root)),
-                                         source["repo"], seen)
-        else:
-            for md in sorted(root.glob("**/*.md")):
-                if not wanted(md) or any(part.startswith(".") for part in md.relative_to(root).parts):
-                    continue
-                question = question_from_filename(md.name)
-                entries += build_entries([question], source["role"],
-                                         category_from_path(md.relative_to(root)),
-                                         source["repo"], seen)
-        print(f"  {source['repo']}: {len(entries)} 题")
-        all_entries += entries
-
+    # 全部抽完再落盘：中途克隆失败不会留下「一个文件刷新了、另一个还是旧的」
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text(json.dumps(all_entries, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"合计 {len(all_entries)} 题 → {OUT_PATH}")
+    for name, entries in outputs.items():
+        path = DATA_DIR / name
+        path.write_text(json.dumps(entries, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"合计 {len(entries)} 题 → {path}")
 
 
 if __name__ == "__main__":

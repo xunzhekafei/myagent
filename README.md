@@ -1,7 +1,7 @@
 # myagent —— 从零手写的 Claude Agent
 
 一个**从零构建的 Agent 运行时**（单文件 `agent.py`，32 个工具），外加一个跑在它上面的真实应用：
-**AI 技术岗模拟面试官**。按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)
+**技术岗模拟面试官**（AI 方向 + 前端方向，题库 7317 道）。按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)
 教程 s01→s17 逐章实现并集成——工具分发、权限、hooks、技能、压缩、记忆、任务图、后台任务、
 cron、团队协作、MCP、Workflow 编排、目标循环，全部挂在同一个循环上。
 
@@ -16,8 +16,8 @@ cron、团队协作、MCP、Workflow 编排、目标循环，全部挂在同一�
 | `agent.py`          | Agent 本体：循环 + 工具 + hooks + 各机制     |
 | `requirements.txt`  | 依赖清单（Anthropic SDK）                   |
 | `skills/`           | 技能目录：每个子目录一个 `SKILL.md`（按需加载的领域知识） |
-| `interview/`        | 面试题库导入脚本与数据                       |
-| `tests/`            | 测试（98 离线 + 2 冒烟）                     |
+| `interview/`        | 面试题库导入脚本与数据（AI 岗 + 前端岗）      |
+| `tests/`            | 测试（108 离线 + 2 冒烟）                    |
 | `documents/`        | 文档（进度、设计记录）                       |
 
 ## 快速开始
@@ -347,15 +347,16 @@ Lead、一次性 subagent、队友的工具调用**都先经过 `PreToolUse`**�
 - 恢复时会清理**半截回合**：崩溃点可能留下没有对应 `tool_result` 的 `tool_use`，直接发会 400——自动丢弃。
 - 存档损坏会被忽略并从新会话开始，不阻塞启动。
 
-## 面试题库（AI 模拟面试官 · 数据层）
+## 面试题库（模拟面试官 · 数据层）
 
-题库共 **1848 道题**，两个来源（都只导入题目、不含答案——对模拟面试反而好，不泄题）：
+题库共 **7317 道题**，四个来源（都只导入题目、不含答案——对模拟面试反而好，不泄题）：
 
-| 来源 | 题数 | 语言 | 许可 |
-| ---- | ---- | ---- | ---- |
-| [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS) | 1647 | 英文 | MIT |
-| [bcefghj/ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide) | 181 | 中文 | MIT |
-| [aceliuchanghong/FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) | 20 | 中文 | MIT |
+| 来源 | 文件 | 题数 | 语言 / 岗位 | 许可 |
+| ---- | ---- | ---- | ---- | ---- |
+| [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS) | `ai_questions.json` | 1647 | 英文 · AI 岗 | MIT |
+| [bcefghj/ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide) | `zh_questions.json` | 181 | 中文 · AI Agent 开发 | MIT |
+| [aceliuchanghong/FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) | `zh_questions.json` | 20 | 中文 · 大模型算法 | MIT |
+| [haizlin/fe-interview](https://github.com/haizlin/fe-interview) | `fe_questions.json` | 5469 | 中文 · 前端 | MIT |
 
 ```bash
 # 导入英文题库（huggingface.co 直连不通时用 hf-mirror 镜像）
@@ -363,12 +364,24 @@ curl -L -o /tmp/interview_forge.csv \
   https://hf-mirror.com/datasets/Davichick/InterviewForge_GenDS/resolve/main/interview_forge_v3_complete.csv
 python interview/import_dataset.py /tmp/interview_forge.csv
 
-# 导入中文题库（浅克隆两个 MIT 仓库并抽取；简历/招聘/个人日志等目录已排除）
+# 导入中文题库（浅克隆三个 MIT 仓库并抽取；简历/招聘/个人日志等非技术目录已排除）
 python interview/import_github_bank.py
 ```
 
-`search_questions(query, category, level, role, limit)`：**中文或英文关键词都可以**，
-各自匹配对应语言的题目；支持类别/难度/岗位过滤。英文题检索到后由面试官翻译/改写成中文提问。
+`search_questions(query, category, level, role, stage, limit)`：支持中英文关键词、
+类别/岗位/阶段过滤。**面试时务必带 `role`**——前端题库有 5000 多道，不传岗位过滤会把 AI 题淹没。
+
+两处容易踩的坑（工具在检索落空时会把可用取值回给模型，便于自纠）：
+
+- `level` **只有英文题库有**（`Level 1/2/3`），中文题库全是空的，传了就一道都搜不到
+- 关键词要跟题库语言一致：中文词匹配不到英文题，反之亦然
+
+`role` 取值：`AI/ML Engineer`、`Data Scientist`、`Data Analyst`、`AI Agent 开发`、
+`大模型算法工程师`、`前端工程师`。`stage="Stage 3"` 可筛出行为面/团队协作类题目
+（前端题库导入时按信号词标注了 71 道）。英文题检索到后由面试官翻译/改写成中文提问。
+
+> 注：`role`、`category`、`stage` 只作为**过滤器**，不参与相关性打分——否则 query 里
+> 出现「前端」二字会让该岗位下每一道题都命中（实测 5380 条全中，修掉后 280 条）。
 
 ## AI 模拟面试官
 
@@ -379,7 +392,7 @@ python interview/import_github_bank.py
 | 面试官技能 | `skills/mock-interviewer/SKILL.md` | 一次一题、追问式深挖、面试中不给反馈、结束触发评分 |
 | 评分 workflow | `interview-report` | 完整问答记录（或 `.transcripts/` 存档文件）→ 解析问答对（解析为空会**报错**，不伪造报告）→ 逐题并行评分 → 汇总 |
 | 场次存档 | `.interviews/<候选人>/` | `save_interview_record` 存档、`list_interviews` 回顾对比 |
-| 题库检索 | `search_questions` | 英文关键词 + 类别/难度/岗位过滤 |
+| 题库检索 | `search_questions` | 中英文关键词 + 类别/岗位/阶段过滤 |
 
 评分维度：技术正确性 / 深度与原理 / 工程与场景思考 / 表达与结构，每维度**必须引用候选人原话作为证据**。
 跑一场完整面试：`/user 名字`（会提示模型候选人是）→ 说「开始面试」→ 面试官按技能流程走 →
@@ -391,7 +404,7 @@ python interview/import_github_bank.py
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest               # 离线测试（74 个，不需要 API key，约 1 秒）
+python -m pytest               # 离线测试（108 个，不需要 API key，约 1 秒）
 python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
 ```
 
@@ -401,6 +414,7 @@ python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
 | `tests/test_tasks.py` | 原子认领、依赖解锁、owner 互斥、环检测、worktree 绑定（目录丢失时失败不回落） |
 | `tests/test_workflow.py` | JSON schema 校验、稳定调用键、journal 读写、pipeline 编排、续跑缓存命中（零重复调用） |
 | `tests/test_runtime.py` | 消息总线（破坏性读/超时）、后台任务生命周期、压缩管线、cron 调度状态机、目标循环四个分支 |
+| `tests/test_interview.py` | 题库检索（关键词/筛选/上限/落空提示）、多数据源加载、前端题库抽取（分类标签、URL 去重、噪音与行为题标记）、评分 workflow、场次存档 |
 | `tests/test_session.py` | 序列化往返（SDK 对象/dict/str）、原子保存、损坏容错、半截回合清理、`/clear` |
 | `tests/test_smoke_api.py` | （slow）真实工具轮 + 独立判断器 |
 
@@ -431,7 +445,15 @@ python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
 
 ## 许可
 
-MIT License（见 [LICENSE](LICENSE)）。
+本项目代码：MIT License（见 [LICENSE](LICENSE)）。
 
-面试题库数据来自 [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS)（Hugging Face，MIT 许可），
-使用 `interview/import_dataset.py` 导入。
+面试题库只导入**题目**、不复制答案，四个来源均为 MIT 许可，各自的版权声明如下：
+
+| 来源 | 版权声明 |
+| ---- | ---- |
+| [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS)（Hugging Face） | MIT |
+| [bcefghj/ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide) | Copyright (c) 2026 |
+| [aceliuchanghong/FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) | Copyright (c) 2024 Lawrence kraft |
+| [haizlin/fe-interview](https://github.com/haizlin/fe-interview) | Copyright (c) 2019 haizhilin |
+
+导入脚本：`interview/import_dataset.py`（英文）、`interview/import_github_bank.py`（中文与前端）。

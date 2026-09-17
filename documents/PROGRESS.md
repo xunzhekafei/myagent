@@ -1,13 +1,13 @@
 # 项目进度
 
-> 最后更新：2026-09-16
+> 最后更新：2026-09-17
 
 ## 这是什么
 
-从零手写的一个 Claude Agent 运行时，外加一个跑在它上面的真实应用——**AI 模拟面试官**。
+从零手写的一个 Claude Agent 运行时，外加一个跑在它上面的真实应用——**模拟面试官**。
 
 - 运行时：[agent.py](../agent.py) 单文件，按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 教程 s01→s17 的路径逐章构建、集成
-- 应用：AI 技术岗模拟面试官（题库检索 → 追问式面试 → 评分报告 → 场次存档）
+- 应用：技术岗模拟面试官（题库检索 → 追问式面试 → 评分报告 → 场次存档），覆盖 AI 与前端两个方向
 - 相关仓库：[myagent](https://github.com/xunzhekafei/myagent)（完整版，本仓库）· [myagent-prototype](https://github.com/xunzhekafei/myagent-prototype)（面试功能之前的原型快照）
 
 模型通过 **Anthropic 官方 SDK** 调用，接口指向 **DeepSeek 的 Anthropic 兼容端点**（`https://api.deepseek.com/anthropic`），
@@ -23,6 +23,7 @@
 | 09-15 | 面试官（数据层） | InterviewForge_GenDS 导入（1647 道 AI 岗题）+ `search_questions` 检索 |
 | 09-15 | 面试官（应用层） | 面试官技能、`interview-report` 评分 workflow、`.interviews/` 场次存档 |
 | 09-16 | 实战调试与修复 | 六项体验/稳定性修复（见「踩坑日志」）；测试达 98 个；发布 GitHub + MIT 许可 |
+| 09-17 | 岗位扩展到前端 | 导入 haizlin/fe-interview（5469 道前端题）；修掉检索打分的既有缺陷；测试达 108 个 |
 
 ## 当前能力
 
@@ -43,10 +44,13 @@
 
 **AI 模拟面试官**：
 
-- **题库**：`interview/data/` 共 **1848 道题、中英双源**——英文 1647 道来自 InterviewForge_GenDS（Hugging Face），
-  中文 201 道从两个 MIT 仓库抽取（[ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide)
+- **题库**：`interview/data/` 共 **7317 道题、四个来源**——英文 1647 道来自 InterviewForge_GenDS（Hugging Face）；
+  中文 AI 岗 201 道从两个 MIT 仓库抽取（[ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide)
   的面试八股文 + [FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) 的技术主题）；
-  `search_questions` 支持中英文关键词 + 类别/难度/岗位过滤。导入器会**排除简历/招聘/个人日志等非技术目录**
+  前端 5469 道来自 [haizlin/fe-interview](https://github.com/haizlin/fe-interview)（按日期归档，自带分类标签，
+  另有 71 道按信号词标注为行为面）。导入器会**排除简历/招聘/个人日志等非技术目录**
+- **岗位**：AI 方向（AI/ML 工程师、数据科学家、数据分析师、AI Agent 开发、大模型算法工程师）
+  + 前端方向（前端工程师）；`search_questions` 支持中英文关键词 + 类别/岗位/阶段过滤
 - **面试官技能**：一次一题、追问上限、碎片输入处理、面试中不给反馈、结束触发评分
 - **评分**：`interview-report` workflow——记录分段并行解析 → 逐题并行评分（技术正确性/深度与原理/工程与场景思考/表达与结构）→ 汇总报告，**每个维度必须引用候选人原话作为证据**
 - **存档**：`.interviews/<候选人>/<时间戳>.json`，支持进步追踪
@@ -61,6 +65,8 @@
 | worktree | 普通隔离目录（教学简化） | 项目非 git 仓库；真实实现应使用 git worktree，且注意它只是目录隔离、不是沙箱 |
 | 上下文压缩阈值 | 150K 字符（教程默认 50K） | 实测一次 60KB 的文件读取就会让会话进入"读什么都变指针"的压缩态 |
 | prompt caching | 主调用 + 队友调用全部开启 | 实测第二轮请求输入 2483→56 token，长对话提速最明显的杠杆 |
+| 前端题库放哪 | **独立文件** `fe_questions.json` | 加载器本来就合并目录下所有 JSON，运行期与并进 `zh_questions.json` 等价；独立文件的价值在别处——5469 条的新增 diff 可审、两个导入器能各自重跑（导前端不必再克隆 AI 仓库）、README 的来源-许可表能一一对应 |
+| 行为题怎么标 | 导入时按信号词写进 `stage` 字段 | 前端的「软技能」分类是个杂物筐（1188 条混着技术题和闲聊）；`stage` 字段本来就在 schema 里且英文题库用了同一语义，标 71 道行为题让「至少一道行为面」的规则对两个岗位都能用 |
 
 ## 踩坑与修复日志
 
@@ -80,12 +86,16 @@
 | 工具计数出现负数 | 压缩让历史变短，计数差值为负 | 负值不显示并重置基线 |
 | 面试开场先跑去删临时文件 | 恢复的会话把上次的调试现场带进新任务 | 恢复时提示先 `/clear`；技能加"开场前自检" |
 | GitHub 推送偶发失败 | `schannel: SSL/TLS handshake failed`（国内网络瞬断） | 重试即可 |
+| 加入前端题库后中文检索命中数虚高（`前端性能优化` 返回 5380 条） | 相关性打分把 `role`/`category` 也算进了匹配文本——query 里的「前端」二字命中该岗位下**每一道**题的 role 字段，全部得 1 分 | `role`/`category`/`stage` 退回纯过滤器，只拿题干 + 关键词打分（5380→280；不带岗位词的查询不受影响） |
+| 前端岗传 `level="Level 1"` 一道都搜不到 | 中文题库没有 `level` 字段（全是空串），子串过滤直接全灭；技能却让从 Level 1 起步 | 检索落空时把题库**实际取值**回给模型；技能写明 `level` 只对英文题库有效，中文题靠提问方式控难度 |
+| 行为题标记把技术题也标上了 | 信号词里放了「管理」，命中「内存管理 / 状态管理 / 路由管理」 | 信号词收窄为团队/沟通/协作/离职/感悟等（`管理`、`失败`、`压力`、`冲突` 都因技术语境误报被剔除） |
+| 前端题库导入只有 5469 而非预估的 5477 | 噪音过滤 + 长度门槛 + `[代码]` 标记剥离各自削掉几条 | 逐条核对：`<6` 字的仅「我也要出题」（本就是噪音），真题无一误伤；数字以实际产出为准 |
 
 ## 测试与运行
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest            # 离线测试（98 个，不需要 API key，约 1 秒）
+python -m pytest            # 离线测试（108 个，不需要 API key，约 1 秒）
 python -m pytest -m slow    # 真实 API 冒烟测试（会消耗 token）
 python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
 ```
@@ -108,13 +118,13 @@ python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
 agent.py              运行时本体（单文件）
 skills/               技能（code-review / deepseek-api / mock-interviewer）
 interview/            题库导入脚本与数据
-tests/                测试（98 离线 + 2 冒烟）
+tests/                测试（108 离线 + 2 冒烟）
 documents/            文档（本文件）
 .sessions/ .memory/ .tasks/ .interviews/ .runtime/ .transcripts/   运行产物（已 gitignore）
 ```
 
 ## 下一步
 
-- **面试官打磨**：开场单问的落实验证；评分松紧校准；更多岗位题库
+- **面试官打磨**：评测前端岗实战效果（角色推断、选题分布、评分是否贴合前端）；开场单问的落实验证；评分松紧校准
 - **可选增强**：语音面试（TTS/ASR，需外部服务）、Web UI、场次对比报告
 - **原型维护**：`myagent-prototype` 保持轻量，作为无面试功能的基线

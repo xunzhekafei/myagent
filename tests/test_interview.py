@@ -113,6 +113,142 @@ def test_importer_extraction_functions():
     assert bank.category_from_path(pathlib.Path("1-大模型应用基础/x.md")) == "大模型应用基础"
 
 
+# ---------- 前端题库（haizlin/fe-interview）导入与检索 ----------
+
+REAL_FE_BANK = (pathlib.Path(__file__).resolve().parent.parent
+                / "interview" / "data" / "fe_questions.json")
+
+FE_SOURCE = {"repo": "haizlin/fe-interview", "dir": "fe-interview",
+             "role": "前端工程师", "out": "fe_questions.json"}
+
+
+def _fe_bank_module():
+    import sys as _sys
+    root = str(pathlib.Path(__file__).resolve().parent.parent / "interview")
+    if root not in _sys.path:
+        _sys.path.insert(0, root)
+    import import_github_bank
+    return import_github_bank
+
+
+def _fe_repo(tmp_path, files: dict):
+    """搭一个最小的 fe-interview 仓库结构：category/<name>.md。"""
+    category = tmp_path / "category"
+    category.mkdir(parents=True, exist_ok=True)
+    for name, text in files.items():
+        (category / name).write_text(text, encoding="utf-8")
+    return tmp_path
+
+
+def _fe_extract(root):
+    return _fe_bank_module()._extract_fe_interview(root, FE_SOURCE, {"text": set(), "url": set()})
+
+
+def test_fe_extractor_parses_tagged_and_plain_files(tmp_path):
+    """history.md 每行带 [分类] 标签；其余文件用文件名当分类。题干自身带 [] 不能破坏解析。"""
+    root = _fe_repo(tmp_path, {
+        "history.md": (
+            "# 历史题目\n\n"
+            "- 第2天 (2019-04-18)\n"
+            "    - [css] [请解释下[] == ![]的结果，为什么？](https://github.com/haizlin/fe-interview/issues/2)\n"
+            "- 第1天 (2019-04-17)\n"
+            "    - [js] [什么是闭包，它有什么用？](https://github.com/haizlin/fe-interview/issues/1)\n"),
+        "nodejs.md": "- [Node 的事件循环和浏览器有什么区别？](https://github.com/haizlin/fe-interview/issues/9)\n",
+    })
+    by_id = {r["url"].rsplit("/", 1)[-1]: r for r in _fe_extract(root)}
+
+    assert by_id["2"]["category"] == "css"              # 标签进 category，不混进题干
+    assert by_id["2"]["question"] == "请解释下[] == ![]的结果，为什么？"
+    assert by_id["1"]["category"] == "js"
+    assert by_id["9"]["category"] == "NodeJs"           # 文件名归一到大类
+    assert all(r["role"] == "前端工程师" and r["lang"] == "zh" for r in by_id.values())
+
+
+def test_fe_extractor_dedups_by_issue_url(tmp_path):
+    """同一 issue 在多文件里措辞不同：history.md 的版本（分类标签 + 较新措辞）胜出。"""
+    root = _fe_repo(tmp_path, {
+        "history.md": ("- 第1天 (2019-04-17)\n"
+                       "    - [css] [css 如何做水平居中？](https://github.com/haizlin/fe-interview/issues/7)\n"),
+        "all.md": "- [旧版本，啰嗦一点：请问 css 如何做水平居中？](https://github.com/haizlin/fe-interview/issues/7)\n",
+    })
+    records = _fe_extract(root)
+    assert len(records) == 1
+    assert records[0]["question"] == "css 如何做水平居中？"
+    assert records[0]["category"] == "css"              # 不是文件名 "all"
+
+
+def test_fe_extractor_drops_noise_and_code_marker(tmp_path):
+    root = _fe_repo(tmp_path, {
+        "history.md": (
+            "- 第1天 (2019-04-17)\n"
+            "    - [软技能] [你会开车吗？](https://github.com/haizlin/fe-interview/issues/1)\n"
+            "    - [js] [写一个方法，实现树的路径查询[代码]](https://github.com/haizlin/fe-interview/issues/2)\n"),
+    })
+    records = _fe_extract(root)
+    assert len(records) == 1
+    assert records[0]["question"] == "写一个方法，实现树的路径查询"    # [代码] 是源站标记，不是题干
+
+
+def test_fe_extractor_tags_behavioral_questions(tmp_path):
+    """行为题按信号词标 stage。信号词要窄——「管理」会命中「内存管理」这类技术题。"""
+    bank = _fe_bank_module()
+    root = _fe_repo(tmp_path, {
+        "history.md": (
+            "- 第1天 (2019-04-17)\n"
+            "    - [软技能] [和同事沟通不顺畅时你会怎么办？](https://github.com/haizlin/fe-interview/issues/1)\n"
+            "    - [js] [请解释 JavaScript 的内存管理机制？](https://github.com/haizlin/fe-interview/issues/2)\n"),
+    })
+    stage_of = {r["question"]: r["stage"] for r in _fe_extract(root)}
+    assert stage_of["和同事沟通不顺畅时你会怎么办？"] == bank.FE_BEHAVIOR_STAGE
+    assert stage_of["请解释 JavaScript 的内存管理机制？"] == ""
+
+
+def test_real_fe_bank_shape():
+    import pytest
+    if not REAL_FE_BANK.is_file():
+        pytest.skip("前端题库未导入（运行 python interview/import_github_bank.py）")
+    records = json.loads(REAL_FE_BANK.read_text(encoding="utf-8"))
+    urls = [r["url"] for r in records]
+    assert len(records) > 5000
+    assert all(r["role"] == "前端工程师" and r["question"].strip() for r in records)
+    assert len(urls) == len(set(urls))                       # issue 链接唯一（去重键）
+    assert not any(r["question"].endswith("[代码]") for r in records)
+    assert all("] [" not in r["question"][:20] for r in records)   # 分类标签没混进题干
+    assert sum(1 for r in records if r["stage"]) > 30        # 行为题有标记
+
+
+def test_role_filters_but_does_not_score(iso):
+    """回归：role 只当过滤器。否则 query 里的「前端」会让该岗位下每一道题都命中。"""
+    _write_bank(iso, [
+        {"question": "谈一谈你知道的前端性能优化方案", "keywords": [], "role": "前端工程师",
+         "category": "js", "level": "", "stage": ""},
+        {"question": "请解释事件循环的工作原理", "keywords": [], "role": "前端工程师",
+         "category": "js", "level": "", "stage": ""},
+    ])
+    result = iso.search_questions.call({"query": "前端性能", "role": "前端工程师"})
+    assert "找到 1 道匹配" in result
+    assert "性能优化" in result
+
+
+def test_stage_filter_picks_behavioral(iso):
+    _write_bank(iso, [
+        {"question": "技术题", "keywords": [], "role": "R", "category": "C",
+         "level": "", "stage": ""},
+        {"question": "行为题", "keywords": [], "role": "R", "category": "C",
+         "level": "", "stage": "Stage 3: Team Fit & Scenario Handling"},
+    ])
+    result = iso.search_questions.call({"query": "", "stage": "Stage 3"})
+    assert "行为题" in result and "技术题" not in result
+
+
+def test_no_match_lists_available_filter_values(iso):
+    """落空时回列可用取值——「给中文题库传了 level」是最容易踩的坑，要能自纠。"""
+    _write_bank(iso)
+    result = iso.search_questions.call({"query": "css 居中", "role": "前端工程师"})
+    assert "没有找到" in result
+    assert "题库里 role 的取值" in result
+
+
 # ---------- 面试评分 workflow ----------
 
 def _stub_interview_runner(calls, question_count=2):

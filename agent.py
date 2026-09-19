@@ -38,9 +38,9 @@ AUX_MODEL = os.environ.get("AUX_MODEL", "claude-haiku-4-5")
 
 # 客户端会自动读取环境变量 ANTHROPIC_API_KEY（这里填 DeepSeek 的密钥即可）
 client = anthropic.Anthropic(
-    #api_key=os.environ["ANTHROPIC_API_KEY"],  # 显式传入，避免 SDK 隐式读取失败
+    api_key=os.environ["ANTHROPIC_API_KEY"],  # 显式传入，避免 SDK 隐式读取失败
     base_url="https://api.deepseek.com/anthropic",  # DeepSeek 的 Anthropic 兼容接口
-)
+) if os.environ.get("ANTHROPIC_API_KEY") else None
 
 # agent 允许操作的工作目录（默认是 agent.py 所在的项目目录）
 WORKDIR = pathlib.Path(__file__).resolve().parent
@@ -2028,7 +2028,7 @@ def _extract_json_object(text: str) -> dict | None:
     return None
 
 
-def _workflow_agent_call(prompt: str, schema: dict | None, label: str, stats: dict):
+def _workflow_agent_call(prompt: str, schema: dict | None, label: str, stats: dict, api_client=None):
     """子 agent：独立上下文、不带工具，只读 prompt 里给它的内容；带 schema 时强制 JSON。"""
     system = ("你是 workflow 里的子 agent。只完成交给你的这一件事，不调用工具，"
               "按要求的格式回答。")
@@ -2037,7 +2037,7 @@ def _workflow_agent_call(prompt: str, schema: dict | None, label: str, stats: di
                   + json.dumps(schema, ensure_ascii=False))
 
     def call(extra: str = "") -> str:
-        response = client.messages.create(
+        response = (api_client or client).messages.create(
             model=MODEL, max_tokens=8000, system=system,  # 思考也吃配额，留足空间让 JSON 写完
             messages=[{"role": "user", "content": prompt + extra}],
         )
@@ -2618,15 +2618,19 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
 
     ctx.phase("解析")
     # 分段解析：整段记录一次解析会超输出上限（实测 parse 输出被截断→"没有找到 JSON 对象"），
-    # 切成小段并行解析，长记录只保留最后 8 段（最近的面试内容在后面）
-    chunks = _split_transcript(transcript)[-WORKFLOW_MAX_PARALLEL:]
-    parsed_chunks = ctx.parallel([
-        (lambda chunk=chunk, index=index: ctx.agent(
-            f"把下面这段面试问答记录整理成结构化问答对（第 {index + 1}/{len(chunks)} 段；"
-            "面试官的追问和候选人的回答都要保留，一轮追问算一题）：\n\n" + chunk,
-            schema=INTERVIEW_QA_SCHEMA, label=f"parse:{index}"))
-        for index, chunk in enumerate(chunks)
-    ])
+    # CLI 默认只保留最后 8 段；Web 显式 include_all 时分批解析所有段。
+    chunks = _split_transcript(transcript)
+    if not args.get("include_all"):
+        chunks = chunks[-WORKFLOW_MAX_PARALLEL:]
+    parsed_chunks = []
+    for start in range(0, len(chunks), WORKFLOW_MAX_PARALLEL):
+        parsed_chunks.extend(ctx.parallel([
+            (lambda chunk=chunk, index=index: ctx.agent(
+                f"把下面这段面试问答记录整理成结构化问答对（第 {index + 1}/{len(chunks)} 段；"
+                "面试官的追问和候选人的回答都要保留，一轮追问算一题）：\n\n" + chunk,
+                schema=INTERVIEW_QA_SCHEMA, label=f"parse:{index}"))
+            for index, chunk in enumerate(chunks[start:start + WORKFLOW_MAX_PARALLEL], start)
+        ]))
     qa = [item for parsed in parsed_chunks for item in parsed.get("qa", [])]
     if not qa:
         # 解析不出内容时必须报错，绝不能拿空列表让汇总模型编一份假报告
@@ -3611,20 +3615,39 @@ def agent_loop(
     max_rounds: int | None = None,
     prefix: str = "",
     active_request: str = "",
+    event_sink=None,
+    cancel_event: threading.Event | None = None,
+    isolated: bool = False,
+    api_client=None,
 ) -> str:
     """核心循环（主 agent 和子 agent 共用，参考 learn-claude-code s06）：
     发请求 -> 检查 tool_use -> 执行工具（过 hooks）-> 结果回传，直到模型给出最终文本。
     返回最终文本；prefix 用于在终端区分主/子 agent 的输出。
     每次请求前先跑 ContextCompactor.prepare（s08），必要时压缩上下文。"""
-    use_mcp = tools is None  # 只有主 agent（默认工具池）会挂上动态发现的 MCP 工具
-    tools = tools or TOOLS
-    handlers = handlers or TOOL_HANDLERS
+    api_client = api_client or client
+    if api_client is None:
+        raise RuntimeError("请先设置 ANTHROPIC_API_KEY，再启动服务")
+
+    def emit(event_type, **data):
+        if event_sink is not None:
+            event_sink(event_type, data)
+
+    def check_cancel():
+        if cancel_event is not None and cancel_event.is_set():
+            raise InterruptedError("本轮已取消")
+
+    check_cancel()
+    if isolated and (tools is None or handlers is None):
+        raise ValueError("隔离模式必须显式提供工具白名单和处理器")
+    use_mcp = tools is None and not isolated
+    tools = TOOLS if tools is None else tools
+    handlers = TOOL_HANDLERS if handlers is None else handlers
     max_rounds = max_rounds or MAX_TOOL_ROUNDS
     # s09：记忆库非空时，按当前请求召回相关记忆，作为背景知识注入 system
-    system = _system_with_memories(system or SYSTEM_PROMPT, messages)
+    system = (system or SYSTEM_PROMPT) if isolated else _system_with_memories(system or SYSTEM_PROMPT, messages)
 
     # s12：到期的定时任务（如有）作为 [Scheduled] 用户消息一并送达（只发生在主会话）
-    fired = _consume_cron_queue() if messages is session_history else []
+    fired = _consume_cron_queue() if not isolated and messages is session_history else []
     cron_start = len(messages)
     for job in fired:
         messages.append({"role": "user", "content": f"[Scheduled] {job.prompt}"})
@@ -3637,17 +3660,22 @@ def agent_loop(
     current_max_tokens = MAX_OUTPUT_TOKENS  # s15：被长度截断时逐次提高
     final_text = ""
     while True:
+        check_cancel()
         rounds += 1
         if rounds > max_rounds:
+            if isolated:
+                raise RuntimeError("本轮工具调用次数达到上限，请重试")
             print(f"{prefix}（已达到最大工具轮数 {max_rounds}，停止——如果任务没完成，"
                   "把当前进展和卡点如实告诉用户）")
             break
 
         # s08：每次请求前先跑压缩管线（大结果转存 / 剪消息 / 旧结果替换 / 摘要）
-        messages[:] = COMPACTOR.prepare(messages, active_request)
+        if not isolated:
+            messages[:] = COMPACTOR.prepare(messages, active_request)
 
         # s11：收集已完成的后台任务，把结果作为通知注入对话（不阻塞主循环）
-        _inject_background_results(messages)
+        if not isolated:
+            _inject_background_results(messages)
 
         # s14：每轮组装工具池——基础工具 + 已连接 MCP server 发现的工具
         if use_mcp:
@@ -3660,7 +3688,7 @@ def agent_loop(
             # 流式输出：正文增量到达即打印（text_stream 自动跳过 thinking 块）
             # cache_control：DeepSeek 兼容端点支持 prompt caching——工具+system+历史会被缓存，
             # 后续每轮命中缓存（实测输入 2483→56 token，延迟近乎减半），长对话提速的关键
-            with client.messages.stream(
+            with api_client.messages.stream(
                 model=MODEL,
                 max_tokens=current_max_tokens,
                 thinking={"type": "adaptive"},  # 自适应思考：让 Claude 自己决定思考深度
@@ -3670,17 +3698,20 @@ def agent_loop(
                 cache_control={"type": "ephemeral"},
             ) as stream:
                 for text in stream.text_stream:
-                    if not printed_prefix:
+                    check_cancel()
+                    emit("reply.delta", text=text)
+                    if event_sink is None and not printed_prefix:
                         print(prefix, end="", flush=True)
                         printed_prefix = True
-                    print(text, end="", flush=True)
+                    if event_sink is None:
+                        print(text, end="", flush=True)
                 response = stream.get_final_message()
             if printed_prefix:
                 print()  # 有输出才收尾换行
         except Exception as exc:
             # s08 补救：上下文仍超限被 API 拒绝时，压缩一次再重试
             err = str(exc).lower()
-            if ("prompt_too_long" in err or "too many tokens" in err) and reactive_retries < MAX_REACTIVE_RETRIES:
+            if not isolated and ("prompt_too_long" in err or "too many tokens" in err) and reactive_retries < MAX_REACTIVE_RETRIES:
                 print(f"{prefix}[context too long] 触发补救压缩，重试一次")
                 messages[:] = COMPACTOR.reactive_compact(messages, active_request)
                 reactive_retries += 1
@@ -3698,7 +3729,8 @@ def agent_loop(
             waiting_ack = False
 
         # s17：目标激活时累计主 agent 的 token 用量（/goal 状态里展示）
-        if GOAL is not None and GOAL.status == "active":
+        check_cancel()
+        if not isolated and GOAL is not None and GOAL.status == "active":
             usage = getattr(response, "usage", None)
             if usage is not None:
                 GOAL.tokens += int(getattr(usage, "input_tokens", 0) or 0)
@@ -3717,20 +3749,23 @@ def agent_loop(
         if not tool_uses:
             final_text = "".join(b.text for b in response.content if b.type == "text")
             # 模型不再需要工具：触发 Stop hook，可能被要求再跑一轮
-            forced = trigger_hooks("Stop", messages)
+            forced = None if isolated else trigger_hooks("Stop", messages)
             if forced:
                 messages.append({"role": "user", "content": str(forced)})
                 continue
             # s09：回合结束，若本轮可能含可保存的新信息则提取；达到阈值时整理记忆
             #（定时回合不提取——任务的 prompt 不是用户陈述的事实）
-            if not _SCHEDULED_TURN and _should_try_extract(messages) and _extract_memories(messages):
+            if not isolated and not _SCHEDULED_TURN and _should_try_extract(messages) and _extract_memories(messages):
                 _consolidate_memories()
             break
 
         # 逐个执行工具调用（保持模型给出的顺序）
         results = []
         for tu in tool_uses:
-            blocked = trigger_hooks("PreToolUse", tu)
+            check_cancel()
+            emit("tool.started", name=tu.name)
+            # isolated 模式只用于宿主提供的面试工具白名单，不连接全局 hooks / MCP。
+            blocked = None if isolated else trigger_hooks("PreToolUse", tu)
             if blocked:
                 results.append({
                     "type": "tool_result",
@@ -3760,13 +3795,15 @@ def agent_loop(
                 })
                 continue
 
-            trigger_hooks("PostToolUse", tu, output)
+            if not isolated:
+                trigger_hooks("PostToolUse", tu, output)
+            emit("tool.completed", name=tu.name)
             results.append({"type": "tool_result", "tool_use_id": tu.id, "content": output})
 
         # s05 reminder：连续 3 轮没用 todo 就提醒一次，防止 agent 做着做着丢了计划
         used_todo = any(tu.name == "todo" for tu in tool_uses)
         rounds_since_todo = 0 if used_todo else rounds_since_todo + 1
-        if rounds_since_todo >= 3:
+        if not isolated and rounds_since_todo >= 3:
             results.append({
                 "type": "text",
                 "text": "（提醒：请用 todo 工具更新任务清单，保持计划最新）",
@@ -3776,7 +3813,7 @@ def agent_loop(
         messages.append({"role": "user", "content": results})
 
         # s08：模型主动要求压缩（compact 工具）→ 本批工具结果已闭合，立即总结整段历史
-        if any(tu.name == "compact" for tu in tool_uses):
+        if not isolated and any(tu.name == "compact" for tu in tool_uses):
             messages[:] = COMPACTOR.compact_history(messages, active_request)
 
     return final_text

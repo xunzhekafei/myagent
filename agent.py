@@ -2425,46 +2425,71 @@ def _goal_stop_hook(messages: list) -> str | None:
 
 
 # ---------- 面试题库：本地检索（AI 模拟面试官的数据层） ----------
-# 题库来自 InterviewForge_GenDS（MIT）：1647 道 AI 岗位题（AI/ML 工程师/数据科学家/数据分析师），
-# 字段有 question/keywords/category/level/role。原题是英文、没有参考答案——对模拟面试反而好（不泄题），
-# 面试官检索后用中文提问。导入方式：python interview/import_dataset.py <原始CSV路径>
+# 三个来源（均为 MIT 许可，都只导入题目、不含答案——对模拟面试反而好，不泄题）：
+#   ai_questions.json  InterviewForge_GenDS    1647 道英文 AI 岗题，带 level/stage 标注
+#   zh_questions.json  GitHub 中文 AI 岗题库     201 道（AI Agent 开发/大模型算法工程师）
+#   fe_questions.json  haizlin/fe-interview   约 5400 道中文前端题，带分类标签
+# 字段有 question/keywords/category/level/role/stage。导入方式见 README「面试题库」一节。
 
 QUESTION_BANK_PATH = WORKDIR / "interview" / "data" / "ai_questions.json"
 _QUESTION_CACHE: list | None = None
 
 
 def _load_question_bank() -> list:
+    """加载题库目录下所有 *.json（多数据源：英文 InterviewForge + 中文 GitHub 题库）。"""
     global _QUESTION_CACHE
     if _QUESTION_CACHE is None:
-        if not QUESTION_BANK_PATH.is_file():
-            _QUESTION_CACHE = []
-        else:
+        records: list = []
+        bank_dir = QUESTION_BANK_PATH.parent
+        files = sorted(bank_dir.glob("*.json")) if bank_dir.is_dir() else []
+        for path in files:
             try:
-                _QUESTION_CACHE = json.loads(QUESTION_BANK_PATH.read_text(encoding="utf-8"))
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    records.extend(data)
             except Exception as error:
-                print(f"[题库] 读取失败：{error}")
-                _QUESTION_CACHE = []
+                print(f"[题库] {path.name} 读取失败：{error}")
+        _QUESTION_CACHE = records
+        if records:
+            print(f"[题库] 已加载 {len(records)} 道题（{len(files)} 个数据文件）")
     return _QUESTION_CACHE
+
+
+def _bank_values(bank: list, field: str, limit: int = 12) -> list[str]:
+    """题库里某个字段实际出现过的取值——检索落空时回给模型，好过让它瞎猜。"""
+    values: list[str] = []
+    for record in bank:
+        value = str(record.get(field, "")).strip()
+        if value and value not in values:
+            values.append(value)
+    return sorted(values)[:limit]
 
 
 @beta_tool
 def search_questions(query: str, category: str = "", level: str = "", role: str = "",
-                     limit: int = 5) -> str:
-    """从本地面试题库检索题目（AI 岗位：AI/ML 工程师、数据科学家、数据分析师）。
-    注意：题库原文是英文，query 必须用英文关键词（如 "model deployment latency"），
-    检索到之后你自己翻译/改写成中文向候选人提问。
+                     stage: str = "", limit: int = 5) -> str:
+    """从本地面试题库检索题目。岗位覆盖 AI 方向和前端方向，中英文题目都有。
+    检索到英文题后自己翻译/改写成中文向候选人提问。
+
+    **面试时一定要带 role**，否则会跨岗位混题（前端题库有 6000 多道，会淹没 AI 题目）。
 
     Args:
-        query: 英文关键词，如 "model deployment latency"、"feature engineering"、"bias variance"。
-        category: 类别过滤（子串匹配），如 "System Design"、"Coding"。
-        level: 难度过滤，如 "Level 1"（基础）/ "Level 2"（实战）/ "Level 3"（边界与冲突）。
-        role: 岗位过滤，如 "AI/ML"、"Data Scientist"、 "Data Analyst"。
+        query: 关键词，中文（如 "Transformer 注意力机制"、"css 盒模型"）
+            或英文（如 "model deployment latency"）均可。
+        category: 类别过滤（子串匹配）。英文题库如 "System Design"；中文 AI 题库如 "高效微调篇"；
+            前端题库如 "js"、"css"、"html"、"软技能"。
+        level: 难度过滤，如 "Level 1"。**只有英文题库有这个字段**，中文题库全是空的，
+            传了会一道都搜不到——中文题用提问方式控制难度。
+        role: 岗位过滤。取值："AI/ML Engineer"、"Data Scientist"、"Data Analyst"、
+            "AI Agent 开发"、"大模型算法工程师"、"前端工程师"。
+        stage: 面试阶段过滤。传 "Stage 3" 可筛出行为面/团队协作题（中英文题库都适用）。
         limit: 返回条数（默认 5，最多 10）。
     """
     bank = _load_question_bank()
     if not bank:
-        return ("错误：题库为空——先运行 python interview/import_dataset.py <原始CSV路径> 导入；"
-                "原始数据在 https://hf-mirror.com/datasets/Davichick/InterviewForge_GenDS")
+        return ("错误：题库为空——先运行 python interview/import_dataset.py <原始CSV路径> 导入英文题，"
+                "再运行 python interview/import_github_bank.py 导入中文与前端题；"
+                "英文原始数据在 https://hf-mirror.com/datasets/Davichick/InterviewForge_GenDS")
     terms = _text_terms(query) if query.strip() else set()
     candidates = []
     for record in bank:
@@ -2474,25 +2499,34 @@ def search_questions(query: str, category: str = "", level: str = "", role: str 
             continue
         if role and role.lower() not in record.get("role", "").lower():
             continue
+        if stage and stage.lower() not in record.get("stage", "").lower():
+            continue
+        # 只拿题干和关键词打分。role/category/stage 已经在上面当过滤器用过了，
+        # 再参与打分会让筛选词反过来淹没结果：query 里只要有「前端」这个二元组，
+        # 该岗位下几千道题全部命中得 1 分，真实匹配被稀释。
         score = sum(1 for term in terms
-                    if term in f"{record.get('question','')} {' '.join(record.get('keywords', []))} "
-                               f"{record.get('category','')} {record.get('role','')}".lower()) if terms else 1
+                    if term in f"{record.get('question','')} "
+                               f"{' '.join(record.get('keywords', []))}".lower()) if terms else 1
         if score:
             candidates.append((score, record))
     if not candidates:
-        hint = ""
-        if re.search(r"[一-鿿]", query):  # 中文查询必然搜不到英文题库，给出自我纠正提示
-            hint = "（提示：题库是英文的，请改用英文关键词重新检索，例如 'model deployment'、'feature engineering'）"
+        hints = []
+        for field, value in (("role", role), ("category", category), ("level", level), ("stage", stage)):
+            if value:
+                hints.append(f"题库里 {field} 的取值：{'、'.join(_bank_values(bank, field))}")
+        if not hints:
+            hints.append("换个更具体的关键词，或换一种语言（中英文题目都有）试试")
         return (f"没有找到匹配的题目（query={query!r} category={category!r} "
-                f"level={level!r} role={role!r}）{hint}")
+                f"level={level!r} role={role!r} stage={stage!r}）。\n" + "\n".join(hints))
     candidates.sort(key=lambda item: -item[0])
     limit = max(1, min(int(limit), 10))
     lines = []
     for _score, record in candidates[:limit]:
+        keywords = record.get("keywords", [])[:6]
         lines.append(
             f"- [{record.get('role','')} | {record.get('category','')} | {record.get('level','')}] "
-            f"{record.get('question','')}\n"
-            f"  关键词：{', '.join(record.get('keywords', [])[:6])}"
+            f"{record.get('question','')}"
+            + (f"\n  关键词：{', '.join(keywords)}" if keywords else "")
         )
     return (f"找到 {len(candidates)} 道匹配，返回前 {min(limit, len(candidates))} 道：\n\n"
             + "\n\n".join(lines))
@@ -2587,7 +2621,7 @@ def _split_transcript(text: str, max_chars: int = 6000) -> list[str]:
 
 def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
     """面试评分：解析完整问答记录 → 逐题并行评分（分批发，遵守并发上限）→ 汇总报告。"""
-    role = str(args.get("role", "AI 技术岗")).strip() or "AI 技术岗"
+    role = str(args.get("role", "技术岗")).strip() or "技术岗"
     transcript = str(args.get("transcript", "")).strip()
     if not transcript:
         source = str(args.get("transcript_file", "")).strip()
@@ -2690,7 +2724,7 @@ def save_interview_record(user: str, role: str, report: str) -> str:
 
     Args:
         user: 候选人名字（多人共用时用来分档）。
-        role: 面试岗位方向，如 "AI/ML 工程师"。
+        role: 面试岗位方向，如 "AI/ML Engineer"、"前端工程师"。
         report: 面试报告文本（JSON 会被解析后存档，其他文本原样存）。
     """
     try:

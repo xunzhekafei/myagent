@@ -27,7 +27,7 @@
 | 面试评分 | 技术正确性、深度与原理、工程与场景思考、表达与结构；逐题证据与建议 |
 | Web 场次管理 | 独立场次、完整问答保存、历史记录、报告 JSON 下载 |
 | 运行恢复 | 取消、重试、提交去重、断线后恢复快照、服务重启后保留未完成记录 |
-| 题库检索 | 内置 1647 道 AI 岗位题，按英文关键词、类别、难度和岗位筛选 |
+| 题库检索 | 内置 8990 道 AI 与前端岗位题，支持中英文关键词、类别、岗位和阶段筛选 |
 | CLI 运行时 | 32 个主工具、hooks、任务图、记忆、上下文压缩、cron、子代理、团队、MCP 与 workflow |
 | 语音扩展 | 已定义 ASR/TTS 接口；录音、识别、朗读和实时语音尚未接入 |
 
@@ -137,6 +137,49 @@ CLI 启动会恢复最近一次对话，开始新场面试前建议先 `/clear`�
 面试规则见 [mock-interviewer 技能](skills/mock-interviewer/SKILL.md)，评分由 `interview-report` workflow 完成。
 
 ### 题库
+
+题库共 **8990 道题**，九个来源（都只导入题目、不含答案——对模拟面试反而好，不泄题）：
+
+| 来源 | 文件 | 题数 | 方向 | 许可 |
+| ---- | ---- | ---- | ---- | ---- |
+| [haizlin/fe-interview](https://github.com/haizlin/fe-interview) | `fe_questions.json` | 5469 | 前端（按日期归档，带分类标签） | MIT |
+| [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS) | `ai_questions.json` | 1647 | AI（英文，带难度/阶段标注） | MIT |
+| [guocong-bincai/ai-interview-guide](https://github.com/guocong-bincai/ai-interview-guide) | `zh_questions.json` | 640 | AI（26 个细分考点） | MIT |
+| [lf2021/Front-End-Interview](https://github.com/lf2021/Front-End-Interview) | `fe_questions.json` | 374 | 前端（含手撕代码题） | MIT |
+| [lengyue1024/BAT_interviews](https://github.com/lengyue1024/BAT_interviews) | `zh_questions.json` `fe_questions.json` | 280 | 机器学习 / Python / 前端 | MIT |
+| [FEGuideTeam/FEGuide](https://github.com/FEGuideTeam/FEGuide) | `fe_questions.json` | 245 | 前端 | MIT |
+| [bcefghj/ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide) | `zh_questions.json` | 181 | AI Agent 开发 | MIT |
+| [bcefghj/learn-nanobot](https://github.com/bcefghj/learn-nanobot) | `zh_questions.json` | 134 | AI Agent（10 个板块） | MIT |
+| [aceliuchanghong/FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) | `zh_questions.json` | 20 | 大模型算法 | MIT |
+
+```bash
+# 导入英文题库（huggingface.co 直连不通时用 hf-mirror 镜像）
+curl -L -o /tmp/interview_forge.csv \
+  https://hf-mirror.com/datasets/Davichick/InterviewForge_GenDS/resolve/main/interview_forge_v3_complete.csv
+python interview/import_dataset.py /tmp/interview_forge.csv
+
+# 导入中文与前端题库（浅克隆八个 MIT 仓库并抽取；简历/招聘/个人面经等求职向目录已排除）
+python interview/import_github_bank.py
+```
+
+`search_questions(query, category, level, role, stage, limit)`：支持中英文关键词、
+类别/岗位/阶段过滤。**面试时务必带 `role`**——前端题库有 6000 多道，不传岗位过滤会把 AI 题淹没。
+
+三处容易踩的坑（工具在检索落空时会把该字段的**实际取值**回给模型，便于自纠）：
+
+- `level` **只有英文题库有**（`Level 1/2/3`），中文题库全是空的，传了就一道都搜不到
+- 关键词要跟题库语言一致：中文词匹配不到英文题，反之亦然
+- **`category` 和 `role` 是绑定的**：`Python` 只挂在 `AI 应用开发` 下、`机器学习` 只挂在
+  `大模型算法工程师` 下，跨岗位取会落空
+
+`role` 取值：`AI 应用开发`（AI 岗主力）、`AI/ML Engineer`、`Data Scientist`、`Data Analyst`、
+`AI Agent 开发`、`大模型算法工程师`、`前端工程师`。`stage="Stage 3"` 可筛出行为面/团队协作类
+题目（导入时按信号词标注）。英文题检索到后由面试官翻译/改写成中文提问。
+
+> 注：`role`、`category`、`stage` 只作为**过滤器**，不参与相关性打分——否则 query 里
+> 出现「前端」二字会让该岗位下每一道题都命中（实测 5380 条全中，修掉后 280 条）。
+
+## 题库
 
 题库位于 `interview/data/ai_questions.json`，来源为 InterviewForge_GenDS：AI/ML 工程师 576 道、数据分析师 576 道、数据科学家 495 道。
 原题为英文且没有参考答案，面试官检索后用中文提问。`search_questions` 的 `query` 使用英文关键词，例如 `model deployment latency`。
@@ -261,7 +304,7 @@ npm run build
 npm run format
 ```
 
-最近一次验证（2026-09-19）：**111 个离线测试通过，2 个真实 API 测试未运行；TypeScript 检查和生产构建通过**。
+最近一次验证（2026-09-19）：**合并主分支后 125 个离线测试通过，2 个真实 API 测试未运行；前端此前已通过 TypeScript 检查和生产构建**。
 
 | 测试文件 | 覆盖 |
 | --- | --- |
@@ -327,4 +370,46 @@ $env:WEB_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
 - [项目进度与设计记录](documents/PROGRESS.md)：阶段里程碑和历史问题记录，状态以文件标注日期为准。
 - [面试官技能](skills/mock-interviewer/SKILL.md)：面试行为与评分流程约束。
 
-项目使用 [MIT License](LICENSE)。面试题库来自 [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS)（MIT 许可），通过 `interview/import_dataset.py` 导入。
+## 参考与来源
+
+**框架来源**
+
+- [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) —— 本项目的 agent 运行时按它的
+  s01→s17 教程路径逐章搭建（工具分发、权限、hooks、技能、压缩、记忆、任务图、后台任务、cron、
+  团队协作、MCP、workflow、目标循环），全部集成在同一个循环上。
+
+**题库来源**（9 个仓库/数据集，均为 MIT 许可，**只导入题目、不复制答案**）
+
+| 方向 | 来源 |
+| --- | --- |
+| AI（英文） | [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS) |
+| AI（中文） | [guocong-bincai/ai-interview-guide](https://github.com/guocong-bincai/ai-interview-guide) · [bcefghj/learn-nanobot](https://github.com/bcefghj/learn-nanobot) · [bcefghj/ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide) · [aceliuchanghong/FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) · [lengyue1024/BAT_interviews](https://github.com/lengyue1024/BAT_interviews) |
+| 前端 | [haizlin/fe-interview](https://github.com/haizlin/fe-interview) · [lf2021/Front-End-Interview](https://github.com/lf2021/Front-End-Interview) · [FEGuideTeam/FEGuide](https://github.com/FEGuideTeam/FEGuide) · [lengyue1024/BAT_interviews](https://github.com/lengyue1024/BAT_interviews) |
+
+各自的题数与版权声明见上面「面试题库」和下面「许可」两节。
+
+**方法论参考**
+
+- [Hisn00w/ASu-skills](https://github.com/Hisn00w/ASu-skills) —— 面试官技能的追问纪律借鉴自它的
+  `interview` 技能。只借鉴方法论，未安装它的技能文件（它的 `references/` 子目录和技能间交叉引用
+  与本项目的技能加载方式不兼容）。
+
+## 许可
+
+本项目代码：MIT License（见 [LICENSE](LICENSE)）。
+
+面试题库只导入**题目**、不复制答案，九个来源均为 MIT 许可，各自的版权声明如下：
+
+| 来源 | 版权声明 |
+| ---- | ---- |
+| [haizlin/fe-interview](https://github.com/haizlin/fe-interview) | Copyright (c) 2019 haizhilin |
+| [InterviewForge_GenDS](https://huggingface.co/datasets/Davichick/InterviewForge_GenDS)（Hugging Face） | MIT |
+| [guocong-bincai/ai-interview-guide](https://github.com/guocong-bincai/ai-interview-guide) | Copyright (c) 2026 guocong-bincai |
+| [lf2021/Front-End-Interview](https://github.com/lf2021/Front-End-Interview) | Copyright (c) 2020 Lee |
+| [lengyue1024/BAT_interviews](https://github.com/lengyue1024/BAT_interviews) | Copyright (c) 2018 冰羽 |
+| [FEGuideTeam/FEGuide](https://github.com/FEGuideTeam/FEGuide) | Copyright (c) 2018 古月梦雅 |
+| [bcefghj/ai-agent-interview-guide](https://github.com/bcefghj/ai-agent-interview-guide) | Copyright (c) 2026 |
+| [bcefghj/learn-nanobot](https://github.com/bcefghj/learn-nanobot) | Copyright (c) 2026 bcefghj |
+| [aceliuchanghong/FAQ_Of_LLM_Interview](https://github.com/aceliuchanghong/FAQ_Of_LLM_Interview) | Copyright (c) 2024 Lawrence kraft |
+
+导入脚本：`interview/import_dataset.py`（英文）、`interview/import_github_bank.py`（中文与前端）。

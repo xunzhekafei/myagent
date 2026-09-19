@@ -1,180 +1,142 @@
-# myagent —— 从零手写的 Claude Agent
+# myagent · AI 面试练习室
 
-[![tests](https://github.com/xunzhekafei/myagent/actions/workflows/tests.yml/badge.svg)](https://github.com/xunzhekafei/myagent/actions/workflows/tests.yml)
+一个从零构建的 Python Agent 运行时，以及基于它实现的 **AI 技术岗模拟面试应用**。
+支持浏览器中的文字面试，也保留终端交互模式。面试围绕候选人背景和项目经历展开，结束后生成四维评分、逐题证据与改进建议。
 
-一个**从零构建的 Agent 运行时**（单文件 `agent.py`，32 个工具），外加一个跑在它上面的真实应用：
-**技术岗模拟面试官**（AI 方向 + 前端方向，题库 8990 道）。
+核心运行时按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) s01→s17 逐章实现，包含工具调用、hooks、记忆、上下文压缩、任务系统、团队协作和工作流编排。
+模型通过 Anthropic Python SDK 连接 DeepSeek 的 Anthropic 兼容端点，使用 DeepSeek 密钥。
 
-运行时的框架按 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 教程的路径搭建，
-它的教学内容这里不再重复——机制原理请看原仓库，本 README 只讲这个项目实际做成了什么。
-模型通过 Anthropic 官方 SDK 调用，接口指向 **DeepSeek 的 Anthropic 兼容端点**，只需一个 DeepSeek 密钥。
+## 导航
 
-> 📋 **设计取舍、踩坑日志与详细进度见 [documents/PROGRESS.md](documents/PROGRESS.md)**
+- [主要功能](#主要功能)
+- [快速开始](#快速开始)
+- [跑一场模拟面试](#跑一场模拟面试)
+- [架构与目录](#架构与目录)
+- [数据与会话](#数据与会话)
+- [开发与测试](#开发与测试)
+- [配置与常见问题](#配置与常见问题)
+- [语音扩展计划](#语音扩展计划)
+- [文档与许可](#文档与许可)
 
-## 目录结构
+## 主要功能
 
-| 文件                | 作用                                        |
-| ------------------- | ------------------------------------------- |
-| `agent.py`          | Agent 本体：循环 + 工具 + hooks + 各机制     |
-| `requirements.txt`  | 依赖清单（Anthropic SDK）                   |
-| `skills/`           | 技能目录：每个子目录一个 `SKILL.md`（按需加载的领域知识） |
-| `interview/`        | 面试题库导入脚本与数据（AI 岗 + 前端岗）      |
-| `tests/`            | 测试（112 离线 + 2 冒烟）                    |
-| `documents/`        | 文档（进度、设计记录）                       |
+| 能力 | 当前实现 |
+| --- | --- |
+| 面试设置 | 姓名、目标岗位、个人背景与练习重点 |
+| 面试对话 | 流式回复、Markdown 展示、多行回答；通过技能约束一次一题与追问节奏 |
+| 面试评分 | 技术正确性、深度与原理、工程与场景思考、表达与结构；逐题证据与建议 |
+| Web 场次管理 | 独立场次、完整问答保存、历史记录、报告 JSON 下载 |
+| 运行恢复 | 取消、重试、提交去重、断线后恢复快照、服务重启后保留未完成记录 |
+| 题库检索 | 内置 8990 道 AI 与前端岗位题，支持中英文关键词、类别、岗位和阶段筛选 |
+| CLI 运行时 | 32 个主工具、hooks、任务图、记忆、上下文压缩、cron、子代理、团队、MCP 与 workflow |
+| 语音扩展 | 已定义 ASR/TTS 接口；录音、识别、朗读和实时语音尚未接入 |
+
+Web 版面向**本地单用户**，使用单后端进程与单工作线程队列；评分 workflow 内部仍可并行处理子任务。
+Web 对话仅开放 `search_questions` 和 `load_skill`，评分与存档由后端管理。CLI 保留完整运行时能力。
 
 ## 快速开始
 
-1. **安装 Python 3.10+**（<https://www.python.org/downloads/>，安装时勾选 "Add to PATH"）
+以下命令以 Windows PowerShell 为例，在项目根目录执行。使用虚拟环境中的 Python，无需手动激活环境。
 
-2. **安装依赖**
+### 1. 环境准备
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+- Python 3.10+。
+- Web 前端构建使用 Node.js，建议使用 22.12+ 的 22.x 或 24.x；仅运行 CLI 不需要 Node.js。
+- 开始模型对话需要有效的 DeepSeek API Key。
 
-3. **配置 API Key**（用 DeepSeek 的密钥即可，不需要 Anthropic 密钥）
-
-   在终端窗口设置（每次新开窗口都要重新设置一次）：
-
-   PowerShell：
-
-   ```powershell
-   $env:ANTHROPIC_API_KEY = "sk-你的DeepSeek密钥"
-   ```
-
-   CMD：
-
-   ```cmd
-   set ANTHROPIC_API_KEY=sk-你的DeepSeek密钥
-   ```
-
-   Git Bash：
-
-   ```bash
-   export ANTHROPIC_API_KEY="sk-你的DeepSeek密钥"
-   ```
-
-   > 想让密钥永久生效（不用每次重设）：在 PowerShell 里运行
-   > `[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-你的DeepSeek密钥", "User")`，
-   > 然后重新打开一个终端窗口。
-
-4. **运行**
-
-   ```bash
-   python agent.py
-   ```
-
-   进入交互模式后直接输入问题（输入 `exit` 或 `quit` 退出）：
-
-   ```
-   你 > 123 + 456 等于多少？
-   123 + 456 = **579**。
-   你 > 现在几点？
-   现在是 **2026年8月26日 22:19:06**。
-   你 > exit
-   再见！
-   ```
-
-   也可以单次提问、问完即止：
-
-   ```bash
-   python agent.py "123 + 456 等于多少？现在几点？"
-   ```
-
-   跑一场模拟面试：
-
-   ```
-   你 > /user 你的名字
-   你 > 开始面试
-   （面试官按技能流程提问，一次一题、追问式深挖）
-   你 > 结束面试        → 自动评分 + 存档
-   ```
-
-## 用的什么接口
-
-本脚本默认连接 **DeepSeek 的 Anthropic 兼容接口**（`https://api.deepseek.com/anthropic`），
-所以你只需要一个 DeepSeek 的 API 密钥就能跑，不需要 Anthropic 密钥。
-
-| 代码里的模型名 | 实际映射到 | 说明 |
-| -------------- | ---------- | ---- |
-| `claude-opus-5` | `deepseek-v4-pro` | 最强，本脚本默认 |
-| `claude-haiku-4-5` / `claude-sonnet-5` | `deepseek-v4-flash` | 更快更便宜 |
-
-> 注意：使用 DeepSeek 接口时，你的问题和代码会发送到 DeepSeek 的服务器。
-> 如果以后想改用 Anthropic 官方接口，把 [agent.py](agent.py) 里的 `base_url` 那一行删掉，
-> 再把密钥换成 `sk-ant-` 开头的 Anthropic 密钥即可，其他代码不用改。
-
-## 它是怎么工作的
-
-```
-你的问题 ──> Claude 思考 ──> 需要工具？ ──是──> [PreToolUse hooks] ──> 执行工具 ──> [PostToolUse hooks] ──> 结果回传
-     ^                                                                                                        |
-     └──────────────────────── 循环，直到 Claude 不再需要工具 ──────────────────────────────────────────────┘
-                                    |
-                                    v（Stop hooks）
-                              打印最终答案
+```powershell
+python -m venv .venv
 ```
 
-- **系统提示词**（`SYSTEM_PROMPT`）：告诉 agent 是什么角色、什么时候该用工具。
-- **工具**（`@beta_tool` 装饰的函数）：主 agent 目前有 32 个——基础 7 个 + `todo`/`load_skill`/`compact`/`task`
-  + task 系统 6 个 + cron 3 个 + 团队 7 个 + `connect_mcp` + `run_workflow`
-  + 面试三件套（`search_questions` / `save_interview_record` / `list_interviews`）。
-  队友有自己的一套（11 个：工作区 5 个 + 任务 4 个 + `send_message`/`submit_plan`）。
-  连接 MCP server 后，它的工具会动态加入主 agent 的工具池（不计入上面的固定数量）。
+已有 `.venv` 时可跳过创建。
 
-  加新工具 = 写一个 `@beta_tool` 函数 + 在 `TOOL_OBJECTS` 列表里加一行（schema 由函数签名自动生成）。
-  注意：工具函数**必须返回字符串**（DeepSeek 兼容接口的要求，返回数字会报 400，用 `str()` 转换）。
-  文件工具会把路径限制在项目目录内（`_safe_path`），防止 agent 读写工作目录之外的文件。
-- **主循环**：手动循环——发请求 → 检查 `tool_use` → 逐个执行 → 结果回传，直到模型不再需要工具。
-  循环本身不写任何扩展逻辑，只触发 hook 事件，扩展全部挂在外面。
+### 2. 安装并启动 Web 版
 
-## 运行时的能力
+安装后端依赖：
 
-框架按教程路径逐章搭建，下面是这些机制**在这个项目里的实际形态**（不是教学讲解）。
-每一节的设计取舍和踩过的坑，见 [documents/PROGRESS.md](documents/PROGRESS.md)。
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-web.txt
+```
 
-| 层 | 能力 |
+安装前端依赖并构建页面：
+
+```powershell
+cd frontend
+npm ci
+npm run build
+cd ..
+```
+
+在同一终端设置密钥并启动：
+
+```powershell
+$env:ANTHROPIC_API_KEY = "你的 DeepSeek 密钥"
+.\start-web.ps1
+```
+
+打开 [面试练习室](http://127.0.0.1:8000)。停止服务使用 Ctrl+C。
+
+后续启动只需设置密钥并执行 `start-web.ps1`。前端源代码修改后需重新执行 `npm run build`。
+如果 PowerShell 阻止执行启动脚本，可直接运行等效命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+```
+
+没有密钥也能启动 Web 服务并查看已有记录，但不能开始模型对话。修改密钥后需重启后端。
+
+### 3. 终端模式
+
+仅使用 CLI 时安装基础依赖即可；已安装 Web 依赖则无需重复安装：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:ANTHROPIC_API_KEY = "你的 DeepSeek 密钥"
+.\.venv\Scripts\python.exe agent.py
+```
+
+也支持单次提问：
+
+```powershell
+.\.venv\Scripts\python.exe agent.py "请用工具计算 123 + 456"
+```
+
+| CLI 命令 | 用途 |
 | --- | --- |
-| 内核 | 手动 agent 循环、流式输出、四类 hooks（`UserPromptSubmit` / `PreToolUse` / `PostToolUse` / `Stop`）、权限三道闸门 |
-| 基础工具 | 读写文件（**支持分页**）、glob、bash（超时/编码/截断保护）、计算、时间 |
-| 计划 | `todo` 会话内清单（+ 防跑偏提醒）、`task` 任务图（依赖/认领/解锁，`.tasks/` 持久化） |
-| 知识 | 技能按需加载（`skills/*/SKILL.md`）、跨会话记忆（`.memory/`，中文二元组切词召回） |
-| 上下文 | 四步压缩管线（大结果落盘 → 剪消息 → 旧结果替换 → 模型摘要），压缩存档可重建对话 |
-| 异步 | 后台任务（`run_in_background` + 通知注入）、cron 定时任务（5 段表达式 + 持久化） |
-| 协作 | 子代理（一次性委派）、持久队友团队（收件箱总线、原子认领、任务目录、关机/计划协议） |
-| 编排 | Workflow 运行时（宿主注册脚本、`agent/parallel/pipeline` 原语、journal 断点续跑）、MCP 外部工具接入 |
-| 目标 | `/goal` 目标循环（独立判断器决定是否继续，不伪装完成） |
-| 会话 | `/user` 候选人、`/clear` 清空、退出自动存档、启动恢复 |
+| `/user 名字` | 设置候选人 |
+| `/clear` 或 `/new` | 清空当前对话，保留长期记忆 |
+| `/goal 完成条件` | 设置目标并自动推进 |
+| `/goal` / `/goal clear` | 查看 / 清除目标 |
+| `exit` / `quit` | 退出并保存会话 |
 
-## 进度
+## 跑一场模拟面试
 
-| 日期 | 阶段 | 产出 |
-| ---- | ---- | ---- |
-| 09-12 | 教程 s01~s17 全部实现 | 工具分发、权限、hooks、todo、子代理、技能、压缩、记忆、任务图、后台任务、cron、团队、MCP、workflow、目标循环 |
-| 09-12 | 工程化第一步 | 流式输出；测试套件（66 离线 + 2 冒烟） |
-| 09-13 | 会话持久化 | `.sessions/latest.json` 原子存档、SDK 对象序列化、半截回合清理 |
-| 09-15 | 面试官（数据层） | 题库导入 + `search_questions` 检索 |
-| 09-15 | 面试官（应用层） | 面试官技能、`interview-report` 评分 workflow、`.interviews/` 场次存档 |
-| 09-16 | 实战调试与修复 | 六项体验/稳定性修复；发布 GitHub + MIT 许可 |
-| 09-17 | 岗位扩展到前端 | 导入 haizlin/fe-interview（5469 题）；修掉检索打分的既有缺陷 |
-| 09-17 | 题库扩充到九个来源 | 共 **8990 题**；导入器改为参数化抽取；借鉴 ASu-skills 的追问方法论 |
-| 09-17 | 加上 CI | GitHub Actions 双平台（Ubuntu + Windows）跑离线测试，无需配置密钥 |
+### Web 流程
 
-**当前能做什么**：跑一场完整的技术岗模拟面试——按岗位（AI / 前端）从 8990 道题库选题、
-一次一题追问式深挖、结束后并行评分并引用原话作证据、存档供进步追踪。
-测试 **112 个离线用例**，约 2 秒跑完，不需要 API key。
+1. 填写姓名、目标岗位及背景，进入面试室，点击「开始面试」。
+2. 按问题提交回答。Enter 换行，Ctrl / Command + Enter 发送。
+3. 需要中断时点击「停止本轮」；失败或取消后可以重试，已提交的回答不会重复插入。
+4. 点击「结束并生成报告」，或提交精确文本「结束面试」「不面了」。至少回答一次才能评分。
+5. 查看综合评分、四维得分和逐题复盘；在侧栏恢复历史场次，也可以下载报告 JSON。
 
-## 会话持久化
+评分使用**当前场次已经形成的问答**。结束时尚未回答的最后一个问题不送去评分；明确回答「不会 / 跳过」仍属于问答记录。
+中断的面试官回复保留供查看，不进入后续上下文与评分。评分结果由模型生成。
 
-退出再启动，接着上次聊——主会话存到 `.sessions/latest.json`（临时文件 + 原子替换）。
+### CLI 流程
 
-- 启动时自动恢复并提示条数；`/clear` 清空会话（**不影响** `.memory/` 长期记忆）。
-- 序列化处理了 SDK 对象：assistant 消息里的 `text`/`thinking`/`tool_use` 块用 `model_dump` 转 dict，
-  恢复时 dict 本来就是合法请求参数（thinking 的 signature 原样保留）。
-- 恢复时会清理**半截回合**：崩溃点可能留下没有对应 `tool_result` 的 `tool_use`，直接发会 400——自动丢弃。
-- 存档损坏会被忽略并从新会话开始，不阻塞启动。
+```text
+你 > /clear
+你 > /user 你的名字
+你 > 开始面试
+（回答面试官的问题）
+你 > 结束面试
+（生成评分报告并存档）
+```
 
-## 面试题库（模拟面试官 · 数据层）
+CLI 启动会恢复最近一次对话，开始新场面试前建议先 `/clear`。
+面试规则见 [mock-interviewer 技能](skills/mock-interviewer/SKILL.md)，评分由 `interview-report` workflow 完成。
+
+### 题库
 
 题库共 **8990 道题**，九个来源（都只导入题目、不含答案——对模拟面试反而好，不泄题）：
 
@@ -217,67 +179,196 @@ python interview/import_github_bank.py
 > 注：`role`、`category`、`stage` 只作为**过滤器**，不参与相关性打分——否则 query 里
 > 出现「前端」二字会让该岗位下每一道题都命中（实测 5380 条全中，修掉后 280 条）。
 
-## AI 模拟面试官
+## 题库
 
-在 agent 上长出的一条完整业务线（数据层见上一节「面试题库」）：
+题库位于 `interview/data/ai_questions.json`，来源为 InterviewForge_GenDS：AI/ML 工程师 576 道、数据分析师 576 道、数据科学家 495 道。
+原题为英文且没有参考答案，面试官检索后用中文提问。`search_questions` 的 `query` 使用英文关键词，例如 `model deployment latency`。
 
-| 组件 | 位置 | 作用 |
-| ---- | ---- | ---- |
-| 面试官技能 | `skills/mock-interviewer/SKILL.md` | 一次一题、追问式深挖、面试中不给反馈、结束触发评分 |
-| 评分 workflow | `interview-report` | 完整问答记录（或 `.transcripts/` 存档文件）→ 解析问答对（解析为空会**报错**，不伪造报告）→ 逐题并行评分 → 汇总 |
-| 场次存档 | `.interviews/<候选人>/` | `save_interview_record` 存档、`list_interviews` 回顾对比 |
-| 题库检索 | `search_questions` | 中英文关键词 + 类别/岗位/阶段过滤 |
+已有题库可直接使用；如需重新导入，在下载源 CSV 后运行：
 
-技能里固化了四条追问纪律（借鉴自 [ASu-skills](https://github.com/Hisn00w/ASu-skills) 的面试技能）：
-**提问前先锁定评分标准**（定了就不因答得好坏而改）、按 **Claim 类型**追问项目经历
-（归属 / 指标 / 技术 / 架构 / 结果）、**按证据停止**而非只看次数、一份**风险信号清单**
-（模糊词无证据、报数字说不清口径、强表述划不清个人边界…）。
-
-评分维度：技术正确性 / 深度与原理 / 工程与场景思考 / 表达与结构，每维度**必须引用候选人原话作为证据**。
-跑一场完整面试：`/user 名字` → 说「开始面试」→ 面试官按技能流程走 → 说「结束面试」→ 自动评分 → 存档。
-对话被压缩过、记录不完整时，评分可用 `transcript_file` 参数指向 `.transcripts/` 里最新的
-存档文件重建（压缩存档现在存的是可解析的消息 JSON）。
-
-## 测试
-
-```bash
-pip install -r requirements-dev.txt
-python -m pytest               # 离线测试（112 个，不需要 API key，约 2 秒）
-python -m pytest -m slow       # 真实 API 冒烟测试（会消耗 token）
+```powershell
+.\.venv\Scripts\python.exe interview/import_dataset.py "你的 CSV 文件路径"
 ```
 
-| 文件 | 覆盖 |
-| ---- | ---- |
-| `tests/test_offline_core.py` | cron 表达式校验/匹配、记忆预筛（含中文二元组切词）、权限三道闸门、MCP 命名与错误兜底、技能加载 |
-| `tests/test_tasks.py` | 原子认领、依赖解锁、owner 互斥、环检测、worktree 绑定（目录丢失时失败不回落） |
-| `tests/test_workflow.py` | JSON schema 校验、稳定调用键、journal 读写、pipeline 编排、续跑缓存命中（零重复调用） |
-| `tests/test_runtime.py` | 消息总线（破坏性读/超时）、后台任务生命周期、压缩管线、cron 调度状态机、目标循环四个分支 |
-| `tests/test_interview.py` | 题库检索（关键词/筛选/上限/落空提示）、多数据源加载、题库抽取（分类标签、URL 去重、markdown 清洗、分类归一）、评分 workflow、场次存档 |
-| `tests/test_session.py` | 序列化往返（SDK 对象/dict/str）、原子保存、损坏容错、半截回合清理、`/clear` |
-| `tests/test_smoke_api.py` | （slow）真实工具轮 + 独立判断器 |
+数据来源与许可见文末。前端也提供前后端开发岗位选项，但当前内置题库主要覆盖 AI 与数据方向。
 
-隔离方式：`tests/conftest.py` 的 `iso` fixture 把 `WORKDIR` 和所有产物目录指到临时目录，
-并清空模块级全局——测试之间互不影响，也不会碰真实项目文件。
+## 架构与目录
 
-CI（[.github/workflows/tests.yml](.github/workflows/tests.yml)）在 push 和 PR 时跑上面这套离线测试，
-Ubuntu 与 Windows 双平台——本项目在 Windows 上开发，`agent.py` 里有 GBK 解码等平台相关分支。
-**不需要配置任何密钥**：`slow` 标记的冒烟测试被默认排除，`conftest.py` 会给
-`ANTHROPIC_API_KEY` 兜一个假值。
+```text
+React + TypeScript 页面
+    │ HTTP：创建场次、读取历史、获取报告
+    │ WebSocket：提交回答、接收回复与进度、取消与重试
+    ▼
+FastAPI 接口（backend/app.py）
+    ▼
+面试服务（backend/service.py）── SQLite 场次快照与事件日志
+    ▼
+Agent 适配层（backend/agent_adapter.py）
+    ├── agent_loop：流式对话 + 面试工具白名单
+    └── interview-report：解析问答 → 逐题评分 → 汇总报告
 
-## 权限控制（三道闸门）
+CLI：agent.py → chat_loop → ask → agent_loop
+语音预留：ASR → 最终转写 → 提交回答；面试官回复 → TTS
+```
 
-有副作用的工具执行前，会依次经过三道闸门。它是注册在 `PreToolUse` 事件上的
-`permission_hook`（[agent.py](agent.py)）：
+`agent.py` 的主循环手动处理模型请求、工具调用和结果回传，使用 SDK 的 `messages.stream()` 接收增量文本。
+Web 通过事件回调接收输出；CLI 继续打印到终端。Web 隔离模式不接入 CLI 的全局 hooks、记忆、cron、团队和会话状态。
 
-| 闸门 | 作用 | 例子 |
-| ---- | ---- | ---- |
-| 1. 硬拒绝 | 永远禁止，不询问 | `rm -rf /`、`sudo`、`shutdown`、**删除/覆盖项目核心文件**（`agent.py`、`requirements.txt` 等，见 `PROTECTED_FILES`） |
-| 2. 规则匹配 | 命中规则的操作进入闸门 3 | 删除/下载/`pip`/`git` 命令、写入修改普通文件 |
-| 3. 用户审批 | 暂停等你在终端输入 y/n（与主循环**共用同一个输入队列**，避免两个消费者抢 stdin） | 每次有副作用的操作 |
+| 路径 | 职责 |
+| --- | --- |
+| `agent.py` | Agent 核心、工具、hooks、CLI 与评分 workflow |
+| `frontend/src/App.tsx` | 面试设置、历史场次、对话与连接恢复 |
+| `frontend/src/components/ReportView.tsx` | 评分报告展示与下载 |
+| `frontend/src/api.ts` / `types.ts` | HTTP / WebSocket 入口与数据类型 |
+| `frontend/src/style.css` | 响应式页面样式 |
+| `backend/app.py` | FastAPI 路由、校验和静态页面托管 |
+| `backend/service.py` | 执行队列、轮次状态、取消、重试和去重 |
+| `backend/sessions.py` | SQLite 存储与递增事件日志 |
+| `backend/agent_adapter.py` | 连接现有 Agent，整理当前场次的上下文和评分记录 |
+| `backend/speech.py` | ASR / TTS 接口定义和语音能力声明 |
+| `skills/` | 面试官、代码审查与接口使用技能 |
+| `interview/` | 题库与导入脚本 |
+| `tests/` | 离线测试与真实 API 冒烟测试 |
+| `requirements*.txt` | 基础、Web、开发测试依赖 |
+| `start-web.ps1` | 本地 Web 启动脚本 |
+| `documents/` | 运行时详解、Web 协议、进度与实现记录 |
 
-只读操作（`add`、`get_time`、`read_file`、`glob`）和普通命令（`dir`、`python ...`）直接放行。
-规则写在 `PERMISSION_RULES` 里，想调整哪些操作需要确认，改这个列表即可。
-> 这是教学级的权限门，真正的安全边界需要容器/沙箱隔离。
+完整的 hooks、权限三道闸门、压缩管线、任务系统和工作流说明见 [Agent 运行时详解](documents/AGENT_RUNTIME.md)。
+HTTP 路由、WebSocket 事件、提交格式与取消机制见 [Web 前端说明](documents/WEB_FRONTEND.md)。
+
+## 数据与会话
+
+| 数据 | Web | CLI |
+| --- | --- | --- |
+| 对话与候选人 | `.web-data/interviews.sqlite3` 中的独立场次 | `.sessions/latest.json` 保存最近对话；`/user` 设置候选人 |
+| 面试报告 | 存入当前 SQLite 场次 | `.interviews/<候选人>/` |
+| 评分中间结果 | `.web-data/<session_id>/report.journal.jsonl` | `.runtime/` |
+| 模型上下文 | 最近约 60000 字符的已完成消息，完整问答另行保存 | 四步上下文压缩，阈值由 `CONTEXT_CHAR_LIMIT` 控制 |
+| 长期记忆 | 当前不启用 CLI 记忆 | `.memory/` |
+
+两种模式的数据独立，目前不自动迁移或合并历史。
+Web 评分会分批解析全部已形成的问答，不读取 CLI 的公共压缩存档。
+
+WebSocket 连接时发送最新场次快照，包括部分生成文本；刷新或重连不会重复拼接旧回复。
+断线不会取消后台工作，服务重启会将未完成轮次标记为中断并允许重试。
+
+取消为协作式：页面立即停止接收旧轮次结果，后端在流式增量、工具和评分调用边界检查信号。
+正在等待的网络调用可能仍需退出，新轮次也可能等待执行队列；取消不会撤销已经产生的模型费用。
+
+运行数据目录、虚拟环境、前端依赖和构建产物均已加入 `.gitignore`。
+备份 Web 数据时可停止服务后复制整个 `.web-data/`；运行中备份应使用 SQLite 在线备份方式。
+
+## 开发与测试
+
+### 前后端开发
+
+先完成依赖安装，再开启两个终端。
+
+终端 1（项目根目录，设置好密钥）：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+终端 2：
+
+```powershell
+cd frontend
+npm run dev
+```
+
+访问 [开发页面](http://127.0.0.1:5173)。Vite 将 `/api` 和 WebSocket 转发到后端 8000 端口。
+API 文档位于 [FastAPI Docs](http://127.0.0.1:8000/docs)。
+
+### 验证命令
+
+完整测试集包含 Web 测试，因此需要同时安装 Web 和开发依赖：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-web.txt -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest
+```
+
+默认只运行离线测试，不需要真实密钥。真实 API 冒烟测试单独执行，会消耗模型 token：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m slow
+```
+
+前端类型检查与生产构建：
+
+```powershell
+cd frontend
+npm run build
+# 按需格式化前端源码
+npm run format
+```
+
+最近一次验证（2026-09-19）：**合并主分支后 125 个离线测试通过，2 个真实 API 测试未运行；前端此前已通过 TypeScript 检查和生产构建**。
+
+| 测试文件 | 覆盖 |
+| --- | --- |
+| `test_offline_core.py` | cron 校验、记忆、权限、MCP 与技能 |
+| `test_tasks.py` | 任务依赖、认领、owner 互斥与工作目录绑定 |
+| `test_workflow.py` | schema 校验、journal、并行编排与缓存续跑 |
+| `test_runtime.py` | 消息总线、后台任务、上下文压缩、cron 与目标循环 |
+| `test_session.py` | CLI 序列化、存档恢复、半截回合清理与输入合并 |
+| `test_interview.py` | 题库检索、评分流程与面试存档 |
+| `test_web.py` | 场次隔离、流式事件、取消重试、重连去重、重启恢复、完整评分与错误提示 |
+| `test_smoke_api.py` | 真实模型工具轮与目标判断器（`slow`） |
+
+测试使用临时目录和模拟模型；CLI 测试通过 `iso` fixture 重置运行时状态，Web 测试注入独立适配器和数据库。
+
+## 配置与常见问题
+
+| 配置 | 作用 |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | DeepSeek 密钥，由后端或 CLI 进程环境读取 |
+| `AUX_MODEL` | CLI 辅助模型，默认 `claude-haiku-4-5` |
+| `WEB_ALLOWED_ORIGINS` | Web 允许的来源，逗号分隔；默认允许 localhost / 127.0.0.1 的 8000 和 5173 端口 |
+| `agent.py` 中的 `MODEL` | 主模型请求名，当前为 `claude-opus-5` |
+| `agent.py` 中的 `base_url` | 默认 `https://api.deepseek.com/anthropic` |
+
+模型请求名是兼容接口配置，实际路由由服务商决定。对话、背景与评分内容会随模型请求发送给该服务商。
+密钥不会写入前端或浏览器；默认启动命令直接读取进程环境，不会自动加载 `.env`。
+
+**页面提示未配置密钥或鉴权失败（401）**：检查启动后端的同一终端是否设置了有效的 DeepSeek 密钥，然后重启服务。`/api/health` 仅检查密钥是否存在，不验证有效性。
+
+**提示前端未构建**：在 `frontend/` 运行 `npm ci`、`npm run build`，然后重启后端。
+如果 PowerShell 不允许执行 `npm.ps1`，可将命令中的 `npm` 改为 `npm.cmd`。
+
+**更换端口后 WebSocket 无法连接**：同步设置允许来源，例如：
+
+```powershell
+$env:WEB_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
+.\start-web.ps1 -Port 8001
+```
+
+前后端开发模式若更改后端端口，还需修改 `frontend/vite.config.ts` 的代理目标。
+
+**停止本轮后下一轮没有立即回复**：旧模型请求可能仍在退出，Web 使用单执行队列；网络调用配置 60 秒超时和最多一次 SDK 重试。
+
+**部署范围**：当前使用一个 Uvicorn worker，仅面向本地使用。账户鉴权、多用户权限和多进程队列尚未实现。
+
+## 语音扩展计划
+
+已经预留 `SpeechRecognizer`、`SpeechSynthesizer` 和带 `final` 标记的转写类型，但当前只支持文字面试。
+
+后续按以下顺序扩展：
+
+1. 录音 → ASR 转写 → 用户确认或修改 → 复用现有回答提交接口。
+2. 面试官回复 → 分句 TTS → 前端播放；停止播放与取消生成分别处理。
+3. 自动判断说话结束、允许打断；通过 `turn_id` 丢弃迟到的文字与音频，按需增加 WebRTC。
+
+临时转写只用于展示，不逐段送给 Agent；最终提交的回答进入完整问答记录。
+其他待完善方向包括更丰富的岗位题库、评分口径校准，以及跨场次进步对比。
+
+## 文档与许可
+
+- [Agent 运行时详解](documents/AGENT_RUNTIME.md)：保留原 README 的 s01→s17 机制说明。
+- [Web 前端说明](documents/WEB_FRONTEND.md)：文件修改清单、实时协议、语音接口与验证记录。
+- [项目进度与设计记录](documents/PROGRESS.md)：阶段里程碑和历史问题记录，状态以文件标注日期为准。
+- [面试官技能](skills/mock-interviewer/SKILL.md)：面试行为与评分流程约束。
 
 ## 参考与来源
 
@@ -302,14 +393,6 @@ Ubuntu 与 Windows 双平台——本项目在 Windows 上开发，`agent.py` �
 - [Hisn00w/ASu-skills](https://github.com/Hisn00w/ASu-skills) —— 面试官技能的追问纪律借鉴自它的
   `interview` 技能。只借鉴方法论，未安装它的技能文件（它的 `references/` 子目录和技能间交叉引用
   与本项目的技能加载方式不兼容）。
-
-## 下一步可以做什么
-
-- **面试官打磨**：评测前端岗的实战效果（岗位推断、选题分布、评分是否贴合前端）；开场单问的落实验证；评分松紧校准。
-- **报告生成提速**：评分 workflow 目前偏慢（逐题并行评分 + 汇总），待研究减少轮次或复用缓存。
-- **加自己的工具**：在 `agent.py` 里写一个 `@beta_tool` 函数即可——查天气 API、发邮件都行。
-- **可选增强**：语音面试（TTS/ASR，需外部服务）、Web UI、场次对比报告。
-- **换模型**：把 `MODEL` 改成 `claude-haiku-4-5`（映射到 deepseek-v4-flash，更快更便宜）。
 
 ## 许可
 

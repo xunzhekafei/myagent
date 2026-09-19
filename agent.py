@@ -38,7 +38,7 @@ AUX_MODEL = os.environ.get("AUX_MODEL", "claude-haiku-4-5")
 
 # 客户端会自动读取环境变量 ANTHROPIC_API_KEY（这里填 DeepSeek 的密钥即可）
 client = anthropic.Anthropic(
-    #api_key=os.environ["ANTHROPIC_API_KEY"],  # 显式传入，避免 SDK 隐式读取失败
+    api_key=os.environ["ANTHROPIC_API_KEY"],  # 显式传入，避免 SDK 隐式读取失败
     base_url="https://api.deepseek.com/anthropic",  # DeepSeek 的 Anthropic 兼容接口
 )
 

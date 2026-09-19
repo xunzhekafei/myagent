@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支连推多次时，取消掉还在跑的旧任务
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: ${{ matrix.os }} · Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 一个平台失败也让另一个跑完，一次看清两边的情况
+      fail-fast: false
+      matrix:
+        # 本项目在 Windows 上开发，agent.py 里有 GBK 解码等平台相关分支，两个平台都要跑
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # 不需要任何密钥：pytest.ini 默认排除 slow 标记的真实 API 冒烟测试，
+      # conftest.py 会给 ANTHROPIC_API_KEY 兜一个假值。约 2 秒跑完。
+      - name: 离线测试
+        run: python -m pytest

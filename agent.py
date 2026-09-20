@@ -3060,17 +3060,23 @@ class ContextCompactor:
     def estimate_chars(self, messages: list) -> int:
         return len(_dump(messages))
 
-    def prepare(self, messages: list, active_request: str) -> list:
-        """每次调用模型前运行。低成本的步骤每轮都做，超限才进入后面的有损步骤。"""
+    def prepare(self, messages: list, active_request: str,
+                archive_dir: pathlib.Path | None = None) -> list:
+        """每次调用模型前运行。低成本的步骤每轮都做，超限才进入后面的有损步骤。
+
+        archive_dir：归档落盘位置，默认 ARCHIVE_DIR（CLI）。
+        隔离运行（Web）要传自己的目录，否则归档会混进 CLI 的 .transcripts/，
+        而评分 workflow 在没有显式 transcript 时会自动挑那里最新的归档。
+        """
         messages = self.tool_result_budget(messages)
-        messages = self.snip_compact(messages)
+        messages = self.snip_compact(messages, archive_dir)
         if self.estimate_chars(messages) > CONTEXT_CHAR_LIMIT:
             target = int(CONTEXT_CHAR_LIMIT * 0.8)
             messages = self.micro_compact(messages, target)
             if self.estimate_chars(messages) > CONTEXT_CHAR_LIMIT:
                 messages = self.fit_tool_results(messages, target)
             if self.estimate_chars(messages) > CONTEXT_CHAR_LIMIT:
-                messages = self.compact_history(messages, active_request)
+                messages = self.compact_history(messages, active_request, archive_dir)
         return messages
 
     # ---- 第 1 步：本轮工具结果总大小超预算 → 大结果转存 ----
@@ -3098,7 +3104,7 @@ class ContextCompactor:
         return messages
 
     # ---- 第 2 步：消息条数超限 → 归档 + 剪掉中间 ----
-    def snip_compact(self, messages: list) -> list:
+    def snip_compact(self, messages: list, archive_dir: pathlib.Path | None = None) -> list:
         if len(messages) <= MAX_MESSAGES:
             return messages
         head_end = 3
@@ -3110,7 +3116,7 @@ class ContextCompactor:
         if (tail_start > 0 and _is_tool_result(messages[tail_start])
                 and _has_tool_use(messages[tail_start - 1])):
             tail_start -= 1
-        path = self._save(ARCHIVE_DIR, f"snip-{_now()}", _archive_dump(messages))
+        path = self._save(archive_dir or ARCHIVE_DIR, f"snip-{_now()}", _archive_dump(messages))
         marker = {"role": "user",
                   "content": f"[已归档 {tail_start - head_end} 条历史消息，完整记录：{path}]"}
         return [*messages[:head_end], marker, *messages[tail_start:]]
@@ -3151,8 +3157,9 @@ class ContextCompactor:
         return messages
 
     # ---- 第 4 步：仍然超限 → 让模型生成事实摘要（唯一会调用模型的步骤）----
-    def compact_history(self, messages: list, active_request: str) -> list:
-        path = self._save(ARCHIVE_DIR, f"compact-{_now()}", _archive_dump(messages))
+    def compact_history(self, messages: list, active_request: str,
+                        archive_dir: pathlib.Path | None = None) -> list:
+        path = self._save(archive_dir or ARCHIVE_DIR, f"compact-{_now()}", _archive_dump(messages))
         print(f"[auto compact] 完整历史已存档：{path}")
         summary = self._summarize(messages)
         if active_request:
@@ -3163,12 +3170,13 @@ class ContextCompactor:
         return [{"role": "user", "content": text}]
 
     # ---- 补救：API 报上下文超长时，压缩早期历史后重试 ----
-    def reactive_compact(self, messages: list, active_request: str) -> list:
+    def reactive_compact(self, messages: list, active_request: str,
+                         archive_dir: pathlib.Path | None = None) -> list:
         tail_start = max(0, len(messages) - KEEP_RECENT_MESSAGES)
         if (tail_start > 0 and _is_tool_result(messages[tail_start])
                 and _has_tool_use(messages[tail_start - 1])):
             tail_start -= 1
-        path = self._save(ARCHIVE_DIR, f"reactive-{_now()}", _archive_dump(messages))
+        path = self._save(archive_dir or ARCHIVE_DIR, f"reactive-{_now()}", _archive_dump(messages))
         old = messages[:tail_start] if tail_start else messages
         summary = self._summarize(old)
         head = {"role": "user",
@@ -3653,6 +3661,7 @@ def agent_loop(
     cancel_event: threading.Event | None = None,
     isolated: bool = False,
     api_client=None,
+    archive_dir: pathlib.Path | None = None,
 ) -> str:
     """核心循环（主 agent 和子 agent 共用，参考 learn-claude-code s06）：
     发请求 -> 检查 tool_use -> 执行工具（过 hooks）-> 结果回传，直到模型给出最终文本。
@@ -3705,7 +3714,7 @@ def agent_loop(
 
         # s08：每次请求前先跑压缩管线（大结果转存 / 剪消息 / 旧结果替换 / 摘要）
         if not isolated:
-            messages[:] = COMPACTOR.prepare(messages, active_request)
+            messages[:] = COMPACTOR.prepare(messages, active_request, archive_dir)
 
         # s11：收集已完成的后台任务，把结果作为通知注入对话（不阻塞主循环）
         if not isolated:
@@ -3747,7 +3756,7 @@ def agent_loop(
             err = str(exc).lower()
             if not isolated and ("prompt_too_long" in err or "too many tokens" in err) and reactive_retries < MAX_REACTIVE_RETRIES:
                 print(f"{prefix}[context too long] 触发补救压缩，重试一次")
-                messages[:] = COMPACTOR.reactive_compact(messages, active_request)
+                messages[:] = COMPACTOR.reactive_compact(messages, active_request, archive_dir)
                 reactive_retries += 1
                 continue
             raise

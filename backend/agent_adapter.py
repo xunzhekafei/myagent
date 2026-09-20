@@ -32,7 +32,7 @@ class InterviewAgent:
         import agent
         return agent
 
-    def reply(self, session, emit, cancel):
+    def reply(self, session, emit, cancel, directory=None):
         agent = self._runtime()
         # Complete transcript remains in SQLite. Only the model context is bounded.
         history = [m for m in session["messages"] if m["status"] == "completed"]
@@ -54,7 +54,9 @@ class InterviewAgent:
                                 tools=[tool.to_dict() for tool in tools],
                                 handlers={tool.name: tool.call for tool in tools},
                                 event_sink=emit, cancel_event=cancel, isolated=True,
-                                api_client=agent.client.with_options(timeout=60, max_retries=1))
+                                api_client=agent.client.with_options(timeout=60, max_retries=1),
+                                # 压缩归档写进场次自己的目录，不混进 CLI 的 .transcripts/
+                                archive_dir=(Path(directory) / "transcripts") if directory else None)
 
     def report(self, session, emit, cancel, directory: Path):
         agent = self._runtime()

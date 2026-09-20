@@ -179,19 +179,6 @@ python interview/import_github_bank.py
 > 注：`role`、`category`、`stage` 只作为**过滤器**，不参与相关性打分——否则 query 里
 > 出现「前端」二字会让该岗位下每一道题都命中（实测 5380 条全中，修掉后 280 条）。
 
-## 题库
-
-题库位于 `interview/data/ai_questions.json`，来源为 InterviewForge_GenDS：AI/ML 工程师 576 道、数据分析师 576 道、数据科学家 495 道。
-原题为英文且没有参考答案，面试官检索后用中文提问。`search_questions` 的 `query` 使用英文关键词，例如 `model deployment latency`。
-
-已有题库可直接使用；如需重新导入，在下载源 CSV 后运行：
-
-```powershell
-.\.venv\Scripts\python.exe interview/import_dataset.py "你的 CSV 文件路径"
-```
-
-数据来源与许可见文末。前端也提供前后端开发岗位选项，但当前内置题库主要覆盖 AI 与数据方向。
-
 ## 架构与目录
 
 ```text

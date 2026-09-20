@@ -16,7 +16,7 @@ class FakeAgent:
     def configured(self):
         return True
 
-    def reply(self, session, emit, cancel):
+    def reply(self, session, emit, cancel, directory=None):
         emit("tool.started", {"name": "search_questions"})
         result = f"{session['candidate']}，请介绍你的项目。"
         for text in result:
@@ -103,7 +103,7 @@ def test_cancel_discards_late_output_and_retries(tmp_path):
     class BlockingAgent(FakeAgent):
         calls = 0
 
-        def reply(self, session, emit, cancel):
+        def reply(self, session, emit, cancel, directory=None):
             self.calls += 1
             if self.calls == 1:
                 emit("reply.delta", {"text": "半句"})
@@ -136,7 +136,7 @@ def test_retry_does_not_duplicate_answer(tmp_path):
     class FailOnce(FakeAgent):
         calls = 0
 
-        def reply(self, session, emit, cancel):
+        def reply(self, session, emit, cancel, directory=None):
             self.calls += 1
             if self.calls == 2:
                 raise RuntimeError("mock outage")
@@ -221,6 +221,31 @@ def test_isolated_agent_stream_keeps_cli_globals_untouched(iso, monkeypatch, cap
     assert [data["text"] for name, data in events] == ["你好", "，请介绍自己。"]
     assert capsys.readouterr().out == ""
     assert iso.session_history == []
+
+
+def test_isolated_compaction_writes_to_its_own_archive_dir(iso, tmp_path):
+    """隔离运行的压缩归档要落进自己的目录。
+
+    不能混进 CLI 的 .transcripts/——评分 workflow 在没传 transcript 时会自动挑那里最新的
+    归档，混在一起的结果就是拿 Web 场次的记录去给 CLI 面试打分。
+    """
+    cli_archive = iso.ARCHIVE_DIR
+    web_archive = tmp_path / "session-transcripts"
+    messages = [{"role": "user", "content": f"第 {i} 条消息"} for i in range(iso.MAX_MESSAGES + 5)]
+
+    iso.COMPACTOR.snip_compact(messages, web_archive)
+
+    assert list(web_archive.glob("snip-*.txt")), "归档应写进传入的目录"
+    assert not list(cli_archive.glob("*.txt")), "不应写进 CLI 的 .transcripts/"
+
+
+def test_cli_compaction_still_uses_default_archive_dir(iso):
+    """不传 archive_dir 时行为不变——CLI 路径必须零改动。"""
+    messages = [{"role": "user", "content": f"第 {i} 条消息"} for i in range(iso.MAX_MESSAGES + 5)]
+
+    iso.COMPACTOR.snip_compact(messages)
+
+    assert list(iso.ARCHIVE_DIR.glob("snip-*.txt"))
 
 
 def test_agent_cancellation_before_model_call(iso):

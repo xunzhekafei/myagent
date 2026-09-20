@@ -132,7 +132,7 @@ class InterviewService:
             if action == "finish":
                 result = self.adapter.report(snapshot, emit, cancel, self.directory / session_id)
             else:
-                result = self.adapter.reply(snapshot, emit, cancel)
+                result = self.adapter.reply(snapshot, emit, cancel, self.directory / session_id)
             with self.lock:
                 session = self.store.get(session_id)
                 if cancel.is_set() or session["active_turn"] != turn_id:

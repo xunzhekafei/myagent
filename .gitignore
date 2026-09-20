@@ -33,3 +33,10 @@ venv/
 
 # 面试记录
 .interviews/
+
+# Web runtime and frontend build
+.web-data/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+.pytest_cache/

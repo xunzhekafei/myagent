@@ -114,8 +114,13 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 
 ## 语音转文字
 
-**已实现**（可选装 `requirements-speech.txt`）：录音 → 本地 faster-whisper 转写 → 文字填入输入框 →
-用户确认或修改 → 走原来的 `answer` 提交。**TTS、实时部分转写、自动断句与打断仍未做。**
+**已实现，但默认关闭**（要另装 `requirements-speech.txt`）：录音 → 本地 faster-whisper 转写 →
+文字填入输入框 → 用户确认或修改 → 走原来的 `answer` 提交。
+**TTS、实时部分转写、自动断句与打断仍未做。**
+
+三种状态：什么都不做 = 没有语音（麦克风按钮不出现）；装了依赖 = 有语音；
+装了但设 `WEB_SPEECH=off`（接受 `0` / `false` / `no`，大小写与空格不敏感）= 仍按没有语音处理，
+不必卸载。成本与准确率的实测数据见 README 的「语音转文字」一节。
 
 协议形状**保持不变**：`speech.py` 的 `SpeechRecognizer` 仍是流式契约
 （`transcribe(audio: AsyncIterator[bytes], *, mime_type) -> AsyncIterator[Transcript]`），

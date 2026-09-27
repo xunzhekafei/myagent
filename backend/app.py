@@ -32,9 +32,13 @@ AUDIO_TYPES = ("audio/webm", "audio/ogg", "audio/mp4", "audio/aac", "audio/wav",
 def _build_recognizer():
     """按环境尝试构建本地语音识别器；依赖没装就返回 None，不抛异常。
 
+    WEB_SPEECH=off 可以显式关掉语音——装了依赖但暂时不想用时，不必去卸载。
     必须在函数内部 import：CI 只装 requirements-web.txt + requirements-dev.txt，
     模块级 import 会把 faster-whisper 变成硬依赖，也会让每次 import backend.app 都变慢。
     """
+    if (os.environ.get("WEB_SPEECH") or "").strip().lower() in ("off", "0", "false", "no"):
+        print("[语音] 已由 WEB_SPEECH 关闭（麦克风按钮不会出现）", flush=True)
+        return None
     try:
         from .whisper_asr import build_recognizer
     except Exception:      # 依赖缺失、CUDA DLL 加载失败，都算「这台机器没有语音能力」

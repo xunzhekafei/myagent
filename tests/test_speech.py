@@ -72,6 +72,23 @@ def test_asr_is_false_when_recognizer_is_none(tmp_path):
     assert speech["input_modes"] == ["text"]
 
 
+def test_web_speech_off_disables_capability(tmp_path, monkeypatch):
+    """装了依赖也能显式关掉——不必去卸载。
+
+    这里刻意不注入 recognizer，走 _AUTO 那条路（也就是真实用户的环境探测路径）。
+    """
+    monkeypatch.setenv("WEB_SPEECH", "off")
+    with TestClient(create_app(tmp_path, FakeAgent())) as client:
+        assert client.get("/api/health").json()["speech"]["asr"] is False
+
+
+def test_web_speech_accepts_common_false_spellings(tmp_path, monkeypatch):
+    for value in ("0", "false", "NO", " off "):
+        monkeypatch.setenv("WEB_SPEECH", value)
+        with TestClient(create_app(tmp_path, FakeAgent())) as client:
+            assert client.get("/api/health").json()["speech"]["asr"] is False, value
+
+
 def test_asr_is_true_with_injected_recognizer(tmp_path):
     with make_client(tmp_path, FakeRecognizer()) as client:
         speech = client.get("/api/health").json()["speech"]

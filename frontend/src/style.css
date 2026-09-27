@@ -623,6 +623,35 @@ footer span {
 .composer-bottom > span {
   font-size: 10px;
   color: #a1ab95;
+  min-width: 0;         /* 提示语变长时允许收缩，别把按钮挤出去 */
+}
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.mic {
+  white-space: nowrap;
+}
+.mic.active {
+  border-color: #ca7349;
+  color: #ca7349;
+  background: #fdf3ee;
+}
+.mic.active::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #ca7349;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
 }
 .thinking {
   color: #99a58a;

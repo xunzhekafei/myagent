@@ -36,3 +36,15 @@ export type Session = SessionSummary & {
   requests: string[];
 };
 export type Action = "start" | "answer" | "finish" | "cancel" | "retry";
+
+export type SpeechCapabilities = {
+  asr: boolean; // 这台机器有没有语音识别能力（依赖装没装）
+  ready: boolean; // 模型是否已加载（有能力 ≠ 已就绪）
+  tts: boolean;
+  input_modes: string[];
+};
+
+export type Health = {
+  configured: boolean;
+  speech: SpeechCapabilities;
+};

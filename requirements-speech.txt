@@ -1,0 +1,12 @@
+# 本地语音转文字（可选）。
+# 不装也能正常跑 Web 面试——只是麦克风按钮不出现、/api/health 里 speech.asr 为 false。
+-r requirements-web.txt
+
+faster-whisper>=1.2,<2
+
+# Windows 上 ctranslate2 需要 cuBLAS / cuDNN 的 DLL。
+# Python 3.8+ 不再用 PATH 解析扩展模块的 DLL 依赖，pip 装的这两个包把 DLL 放在
+# site-packages/nvidia/*/bin，需要 backend/whisper_asr.py 里显式 add_dll_directory 注册。
+# 想强制走 CPU（省掉这两个包和下载）就把 WHISPER_DEVICE 设成 cpu。
+nvidia-cublas-cu12>=12,<13 ; sys_platform == "win32"
+nvidia-cudnn-cu12>=9,<10 ; sys_platform == "win32"

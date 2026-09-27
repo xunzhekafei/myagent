@@ -53,7 +53,7 @@ def ws_done(ws):
 
 
 def test_web_interview_and_report_reconnect(tmp_path):
-    app = create_app(tmp_path, FakeAgent())
+    app = create_app(tmp_path, FakeAgent(), recognizer=None)
     with TestClient(app) as client:
         assert client.get("/api/health").json()["speech"]["asr"] is False
         s = client.post("/api/sessions", json={"candidate": "小明", "role": "工程师"}).json()
@@ -76,7 +76,7 @@ def test_web_interview_and_report_reconnect(tmp_path):
             state = ws_done(ws)
             assert state["status"] == "completed"
         assert "我做了一个检索项目。" in client.get(url + "/report").json()["source"]
-    with TestClient(create_app(tmp_path, FakeAgent())) as client:
+    with TestClient(create_app(tmp_path, FakeAgent(), recognizer=None)) as client:
         assert client.get(url).json()["report"]["overall"] == 8
 
 
@@ -175,7 +175,7 @@ def test_restart_marks_partial_turn_interrupted(tmp_path):
 
 
 def test_web_validates_inputs_and_origin(tmp_path):
-    with TestClient(create_app(tmp_path, FakeAgent())) as client:
+    with TestClient(create_app(tmp_path, FakeAgent(), recognizer=None)) as client:
         assert client.post("/api/sessions", json={"candidate": " ", "role": "AI"}).status_code == 422
         assert client.post("/api/sessions", headers={"origin": "https://unrelated.example"},
                            json={"candidate": "甲", "role": "AI"}).status_code == 403
@@ -192,7 +192,7 @@ def test_web_validates_inputs_and_origin(tmp_path):
 def test_unconfigured_server_still_serves_history(tmp_path):
     adapter = FakeAgent()
     adapter.configured = lambda: False
-    with TestClient(create_app(tmp_path, adapter)) as client:
+    with TestClient(create_app(tmp_path, adapter, recognizer=None)) as client:
         assert client.get("/api/health").json()["configured"] is False
         sid = client.post("/api/sessions", json={"candidate": "甲", "role": "AI"}).json()["id"]
         with client.websocket_connect(f"/api/sessions/{sid}/ws") as ws:

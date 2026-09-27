@@ -15,7 +15,7 @@
 - [数据与会话](#数据与会话)
 - [开发与测试](#开发与测试)
 - [配置与常见问题](#配置与常见问题)
-- [语音扩展计划](#语音扩展计划)
+- [语音转文字](#语音转文字)
 - [文档与许可](#文档与许可)
 
 ## 主要功能
@@ -29,7 +29,7 @@
 | 运行恢复 | 取消、重试、提交去重、断线后恢复快照、服务重启后保留未完成记录 |
 | 题库检索 | 内置 8990 道 AI 与前端岗位题，支持中英文关键词、类别、岗位和阶段筛选 |
 | CLI 运行时 | 32 个主工具、hooks、任务图、记忆、上下文压缩、cron、子代理、团队、MCP 与 workflow |
-| 语音扩展 | 已定义 ASR/TTS 接口；录音、识别、朗读和实时语音尚未接入 |
+| 语音转文字 | 本地 faster-whisper（可选装）；录音 → 转写 → 确认后按文字提交。TTS 与实时转写尚未接入 |
 
 Web 版面向**本地单用户**，使用单后端进程与单工作线程队列；评分 workflow 内部仍可并行处理子任务。
 Web 对话仅开放 `search_questions` 和 `load_skill`，评分与存档由后端管理。CLI 保留完整运行时能力。
@@ -195,7 +195,7 @@ Agent 适配层（backend/agent_adapter.py）
     └── interview-report：解析问答 → 逐题评分 → 汇总报告
 
 CLI：agent.py → chat_loop → ask → agent_loop
-语音预留：ASR → 最终转写 → 提交回答；面试官回复 → TTS
+语音转文字：录音 → 本地 faster-whisper → 文字填入输入框 → 确认后走 answer（不经 WebSocket）；面试官回复 → TTS（未做）
 ```
 
 `agent.py` 的主循环手动处理模型请求、工具调用和结果回传，使用 SDK 的 `messages.stream()` 接收增量文本。
@@ -212,7 +212,9 @@ Web 通过事件回调接收输出；CLI 继续打印到终端。Web 隔离模�
 | `backend/service.py` | 执行队列、轮次状态、取消、重试和去重 |
 | `backend/sessions.py` | SQLite 存储与递增事件日志 |
 | `backend/agent_adapter.py` | 连接现有 Agent，整理当前场次的上下文和评分记录 |
-| `backend/speech.py` | ASR / TTS 接口定义和语音能力声明 |
+| `backend/speech.py` | ASR / TTS 协议与转写结果类型（零依赖） |
+| `backend/whisper_asr.py` | 本地 faster-whisper 实现（依赖可选，懒加载） |
+| `requirements-speech.txt` | 语音依赖（可选，不装不影响 Web 面试） |
 | `skills/` | 面试官、代码审查与接口使用技能 |
 | `interview/` | 题库与导入脚本 |
 | `tests/` | 离线测试与真实 API 冒烟测试 |
@@ -337,17 +339,31 @@ $env:WEB_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
 
 **部署范围**：当前使用一个 Uvicorn worker，仅面向本地使用。账户鉴权、多用户权限和多进程队列尚未实现。
 
-## 语音扩展计划
+## 语音转文字
 
-已经预留 `SpeechRecognizer`、`SpeechSynthesizer` 和带 `final` 标记的转写类型，但当前只支持文字面试。
+**已实现**（可选装）。录音 → 本地 faster-whisper 转写 → 文字落进输入框 → 你确认或修改 →
+走原来的文字提交路径。
 
-后续按以下顺序扩展：
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-speech.txt
+.\start-web.ps1
+```
 
-1. 录音 → ASR 转写 → 用户确认或修改 → 复用现有回答提交接口。
-2. 面试官回复 → 分句 TTS → 前端播放；停止播放与取消生成分别处理。
-3. 自动判断说话结束、允许打断；通过 `turn_id` 丢弃迟到的文字与音频，按需增加 WebRTC。
+- **本地推理，不联网、不额外花钱**：模型跑在自己的显卡上（CPU 也能跑，设 `WHISPER_DEVICE=cpu`），音频不出本机。
+  不装这个依赖包，Web 面试一切照常——只是麦克风按钮不出现。
+- **首次使用要下模型**（默认 `large-v3-turbo`，约 1.6 GB，只下一次）。`start-web.ps1` 默认把
+  `HF_ENDPOINT` 指向 hf-mirror 镜像；不设的话国内直连 Hugging Face 通常卡到超时，看起来像卡死。
+  页面会在录音前提示下载，也可以先手动调 `POST /api/speech/warmup` 预热。
+- **转写不改动会话**：音频只在 `POST /api/sessions/{id}/transcribe` 走一趟，转写完即丢、不落盘；
+  文字填进输入框由你确认。所以问答记录里存的仍是你最终提交的文字，
+  `input_mode` 保持 `"text"`——服务端在提交时只看到一个字符串，无法区分打字、口述后编辑还是口述未改。
+- 相关环境变量：`WHISPER_MODEL`（默认 `large-v3-turbo`；嫌大或嫌慢可设 `small`）、
+  `WHISPER_DEVICE`（`auto` / `cuda` / `cpu`）、`WHISPER_LANGUAGE`（默认 `zh`）、
+  `WHISPER_CPU_THREADS`、`WHISPER_MODEL_DIR`。
 
-临时转写只用于展示，不逐段送给 Agent；最终提交的回答进入完整问答记录。
+**还没做**：面试官回复的朗读（TTS）、边说边出字的实时转写、自动判断说话结束与打断。
+`SpeechRecognizer` 协议本身就带 `final` 标记，真流式将来可以直接接上。
+
 其他待完善方向包括更丰富的岗位题库、评分口径校准，以及跨场次进步对比。
 
 ## 文档与许可

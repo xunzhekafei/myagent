@@ -9,7 +9,9 @@
 | `backend/sessions.py` | SQLite 场次快照与递增事件日志；记录独立于模型上下文 |
 | `backend/service.py` | 单工作线程执行队列、场次隔离、提交去重、取消、重试、重启恢复 |
 | `backend/agent_adapter.py` | 复用 Agent 和评分 workflow；面试工具白名单、上下文裁剪、按场次评分与进度事件 |
-| `backend/speech.py` | ASR / TTS Protocol 与转写结果类型，能力查询明确返回尚未启用语音 |
+| `backend/speech.py` | ASR / TTS Protocol 与转写结果类型（零依赖，能力由注入的 recognizer 决定） |
+| `backend/whisper_asr.py` | 本地 faster-whisper 实现：懒加载、GPU 优先 CPU 兜底、串行化推理 |
+| `requirements-speech.txt` | 语音依赖（可选；不装则 `speech.asr` 为 false、麦克风按钮不出现） |
 | `agent.py` | 缺少密钥时可导入；增加事件回调、取消信号、隔离模式和可注入客户端；评分可分批解析全部记录 |
 | `tests/test_web.py` | WebSocket 链路、场次隔离、取消与迟到回复、重试去重、重启、校验、流式输出与完整评分覆盖 |
 | `requirements-web.txt` / `requirements-dev.txt` | Web 和测试依赖 |
@@ -89,6 +91,8 @@ HTTP：
 | `POST /api/sessions` | 创建场次：`candidate / role / background` |
 | `GET /api/sessions/{id}` | 完整场次快照 |
 | `GET /api/sessions/{id}/report` | 评分报告 |
+| `POST /api/sessions/{id}/transcribe` | 语音转文字：body 是原始音频字节，返回 `{text, utterance_id}`。**不写入会话**、不落盘。状态码：404 场次不存在 / 409 已结束 / 503 未启用语音 / 413 超限 / 415 类型不支持 |
+| `POST /api/speech/warmup` | 显式加载语音模型（首次可能要下载几百 MB），返回更新后的能力声明 |
 
 WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 
@@ -108,15 +112,40 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 正在等待的网络调用并非强制终止；Web 调用配置 60 秒网络超时、至多一次 SDK 重试。由于只有一个执行线程，新轮次可能需要等待旧请求退出。
 中断不会撤销已经产生的模型费用。后端异常的详情写入终端，页面区分鉴权失败、限流和网络错误，不直接展示 SDK 响应体。
 
-## 语音接入边界
+## 语音转文字
 
-目前仅支持文字，未接入麦克风、识别或朗读服务，也没有伪装可用的语音按钮。
+**已实现**（可选装 `requirements-speech.txt`）：录音 → 本地 faster-whisper 转写 → 文字填入输入框 →
+用户确认或修改 → 走原来的 `answer` 提交。**TTS、实时部分转写、自动断句与打断仍未做。**
 
-- `SpeechRecognizer.transcribe()` 接收音频流，输出带 `utterance_id` 和 `final` 的 `Transcript`。
-- `SpeechSynthesizer.synthesize()` 接收回复文字与 `turn_id`，输出音频流。
-- 下一阶段实现录音 → ASR → 用户确认最终转写 → `answer`。临时识别文本只用于展示。
-- 届时扩展 WebSocket 音频事件、输入模式校验和音频存储策略，再实现句级 TTS 缓冲与播放。
-- 停止播放仅清空播放队列；取消生成走轮次取消；结束面试走 `finish`，三者分别处理。
+协议形状**保持不变**：`speech.py` 的 `SpeechRecognizer` 仍是流式契约
+（`transcribe(audio: AsyncIterator[bytes], *, mime_type) -> AsyncIterator[Transcript]`），
+批式后端天然满足它——先收完音频块，用 `asyncio.to_thread` 跑推理，只 yield 一个 `final=True`。
+将来要接真流式，位置还留着。`SpeechSynthesizer` 仍是空契约。
+
+**与原计划的偏离**：这里原本记的是「扩展 WebSocket 音频事件」。实际改走**独立的 HTTP 端点**
+`POST /api/sessions/{id}/transcribe`，因为音频根本不需要进入会话——转写结果进输入框、由用户确认后
+才以文字提交。这样一次绕开三个障碍：WS 循环只收 `receive_text()`、单条消息 64000 字符上限、
+`Command` 的 `action: Literal[...]` 校验。原计划里的「输入模式校验」和「音频存储策略」因此**不再需要**，
+不是被砍掉而是被绕过了——服务端在提交时只看到一个字符串，无法区分打字与口述，所以
+`input_mode` 保持 `"text"`（`types.ts` 里的 `"voice"` 联合类型保留未用）。
+
+几个实现要点：
+
+- **能力与就绪分开**：`/api/health` 的 `speech.asr` 表示「这台机器有语音能力」（取决于注入的
+  recognizer 是否为 None），`speech.ready` 表示「模型已加载」。前端只看 `asr`。
+  `asr` **不能**由「faster_whisper 能否 import」决定——那样本机一装依赖，
+  断言 `asr is False` 的测试就挂，而 CI 照样绿，故障只在功能开始可用之后、只在本机出现。
+- **转写不碰 `service.lock`，也不走 `service.executor`**。后者是 `max_workers=1` 且绑着轮次状态机，
+  转写不是轮次；前者被 WS 处理在事件循环上同步持有，占住它会把快照和健康检查一起冻住。
+- **模型不在启动时加载**，首次转写或 `POST /api/speech/warmup` 才加载。
+  `start-web.ps1` 默认设 `HF_ENDPOINT=https://hf-mirror.com`——国内直连 Hugging Face 通常卡到超时。
+- 音频转写完即丢，**不落盘**。
+- 端点没有 `request_id` 幂等：本地无副作用、结果确定，重复转写无害。
+
+## 尚未接入（TTS 与实时语音）
+
+- `SpeechSynthesizer.synthesize()` 接收回复文字与 `turn_id`，输出音频流——仍是空契约。
+- 实现 TTS 时再考虑句级缓冲与播放；停止播放仅清空播放队列、取消生成走轮次取消、结束面试走 `finish`，三者分别处理。
 - 进一步支持自动说话结束检测与打断时，复用 `turn_id` 丢弃旧音频和旧文字；需要时增加 WebRTC 音频通道。
 
 ## 验证
@@ -126,6 +155,9 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 cd frontend
 npm run build
 ```
+
+离线测试不加载语音模型（`tests/test_speech.py` 注入假识别器），也不需要密钥，约 5 秒跑完。
+装了 `requirements-speech.txt` 之后这一点**依然成立**——测试里构造 app 时显式传 `recognizer=None`。
 
 离线测试不会调用模型。现有 `-m slow` 仍表示真实 API 冒烟测试，会使用已配置的密钥。
 

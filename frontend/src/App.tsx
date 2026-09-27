@@ -1,8 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import { api, connectSession } from "./api";
-import type { Action, Session, SessionSummary } from "./types";
+import { api, connectSession, transcribe } from "./api";
+import type { Action, Health, Session, SessionSummary } from "./types";
 import ReportView from "./components/ReportView";
+
+// 录音上限：opus 大约 24–32 kbps，2 分钟还不到 1MB，远低于后端 5MB 的兜底上限
+const MAX_RECORD_MS = 120_000;
+// 别假设 audio/webm;codecs=opus——Firefox 给 ogg、Safari 给 mp4。让浏览器挑一个它支持的。
+const AUDIO_MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/mp4",
+];
+
+function micErrorMessage(error: unknown): string {
+  const name = (error as { name?: string } | null)?.name;
+  if (name === "NotAllowedError")
+    return "麦克风权限被拒绝。请在地址栏的站点设置里允许麦克风后重试。";
+  if (name === "NotFoundError") return "没有找到麦克风设备。";
+  if (name === "NotReadableError")
+    return "麦克风被其他程序占用了（Windows 上很常见）。关掉占用的程序后重试。";
+  return `打不开麦克风：${error instanceof Error ? error.message : String(error)}`;
+}
 
 const labels: Record<string, string> = {
   ready: "待继续",
@@ -27,7 +47,7 @@ export default function App() {
   );
   const [session, setSession] = useState<Session | null>(null);
   const [connected, setConnected] = useState(false);
-  const [health, setHealth] = useState<{ configured: boolean } | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
   const [draft, setDraft] = useState("");
@@ -37,13 +57,39 @@ export default function App() {
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState(false);
   const [view, setView] = useState<"chat" | "report">("chat");
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [micNote, setMicNote] = useState("");
   const socket = useRef<WebSocket | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const micStream = useRef<MediaStream | null>(null);
+  const micTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micAbort = useRef<AbortController | null>(null);
   const pendingCommand = useRef<{
     action: Action;
     text: string;
     request_id: string;
   } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+
+  /** 释放麦克风。先摘掉回调再停，免得 teardown 反而触发一次转写。
+   *  定义在 effect 之前——下面切换场次的 cleanup 要用它。 */
+  const releaseMic = useCallback(() => {
+    if (micTimer.current) {
+      clearTimeout(micTimer.current);
+      micTimer.current = null;
+    }
+    const active = recorder.current;
+    recorder.current = null;
+    if (active) {
+      active.onstop = null;
+      active.ondataavailable = null;
+      if (active.state !== "inactive") active.stop();
+    }
+    // 不 stop 每一路轨道的话，系统的麦克风指示灯不会灭
+    micStream.current?.getTracks().forEach((track) => track.stop());
+    micStream.current = null;
+  }, []);
 
   const refresh = useCallback(
     () =>
@@ -54,7 +100,7 @@ export default function App() {
   );
   useEffect(() => {
     void refresh();
-    api<{ configured: boolean }>("/health")
+    api<Health>("/health")
       .then(setHealth)
       .catch((e) => setError(e.message));
   }, [refresh]);
@@ -134,8 +180,14 @@ export default function App() {
       ws?.close();
       socket.current = null;
       setConnected(false);
+      // 切换场次或卸载时要停下录音并中止在途转写，
+      // 否则转写结果会落进另一场次的输入框、麦克风也不会释放
+      micAbort.current?.abort();
+      releaseMic();
+      setRecording(false);
+      setTranscribing(false);
     };
-  }, [selected, refresh]);
+  }, [selected, refresh, releaseMic]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages.at(-1)?.text, view]);
@@ -153,6 +205,80 @@ export default function App() {
     setError("");
     socket.current.send(JSON.stringify(command));
   };
+  const stopRecording = () => {
+    const active = recorder.current;
+    if (active && active.state !== "inactive") active.stop();
+  };
+
+  const runTranscribe = async (blob: Blob, mimeType: string) => {
+    if (!selected) return;
+    if (blob.size < 1024) {
+      setMicNote("录得太短了，再说一次？");
+      return;
+    }
+    setTranscribing(true);
+    setMicNote("正在识别…");
+    const controller = new AbortController();
+    micAbort.current = controller;
+    try {
+      const text = await transcribe(selected, blob, mimeType, controller.signal);
+      if (controller.signal.aborted) return;
+      if (!text.trim()) {
+        setMicNote("没有听清，请重试");
+        return;
+      }
+      setMicNote("");
+      setDraft((current) => {
+        const merged = current.trim()
+          ? `${current.trimEnd()}\n${text.trim()}`
+          : text.trim();
+        return merged.slice(0, 12000); // maxLength 管不住 setState，超了服务端会拒
+      });
+    } catch (e) {
+      if (!controller.signal.aborted) setError((e as Error).message);
+    } finally {
+      if (micAbort.current === controller) micAbort.current = null;
+      setTranscribing(false);
+    }
+  };
+
+  const startRecording = async () => {
+    if (!selected || recording || transcribing) return;
+    setError("");
+    setMicNote("");
+    // 非安全上下文下 mediaDevices 直接不存在（用局域网 IP 访问时就是这样）
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("这个地址打不开麦克风：浏览器要求安全上下文，请用 127.0.0.1 或 localhost 访问。");
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      setError(micErrorMessage(e));
+      return;
+    }
+    micStream.current = stream;
+    const mimeType =
+      AUDIO_MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+    const active = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const parts: Blob[] = [];
+    active.ondataavailable = (event) => {
+      if (event.data.size) parts.push(event.data);
+    };
+    active.onstop = () => {
+      const type = active.mimeType || mimeType || "audio/webm";
+      const blob = new Blob(parts, { type });
+      releaseMic();
+      setRecording(false);
+      void runTranscribe(blob, type);
+    };
+    recorder.current = active;
+    active.start();
+    setRecording(true);
+    micTimer.current = setTimeout(stopRecording, MAX_RECORD_MS);
+  };
+
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     setCreating(true);
@@ -522,29 +648,51 @@ export default function App() {
                       <span>
                         {busy
                           ? progress || "面试官正在处理本轮…"
-                          : "Ctrl / ⌘ + Enter 发送 · Enter 换行"}
+                          : recording
+                            ? "正在录音…（最长 2 分钟，说完点「停止录音」）"
+                            : transcribing
+                              ? "正在识别…"
+                              : micNote || "Ctrl / ⌘ + Enter 发送 · Enter 换行"}
                       </span>
-                      {busy ? (
-                        <button
-                          className="secondary"
-                          disabled={!available}
-                          onClick={() => send("cancel")}
-                        >
-                          停止本轮
-                        </button>
-                      ) : (
-                        <button
-                          className="primary"
-                          disabled={
-                            !draft.trim() ||
-                            !available ||
-                            !session.messages.length
-                          }
-                          onClick={() => send("answer")}
-                        >
-                          发送回答 ↑
-                        </button>
-                      )}
+                      {/* 包一层：.composer-bottom 是 space-between，直接加第三个子元素会把按钮拉散 */}
+                      <div className="composer-actions">
+                        {health?.speech.asr && (
+                          <button
+                            className={recording ? "secondary mic active" : "secondary mic"}
+                            // 录音中不能被禁用，否则用户停不下来
+                            disabled={
+                              !connected ||
+                              transcribing ||
+                              !session.messages.length ||
+                              (!recording && (busy || !available))
+                            }
+                            onClick={recording ? stopRecording : () => void startRecording()}
+                          >
+                            {recording ? "停止录音" : transcribing ? "识别中…" : "语音输入"}
+                          </button>
+                        )}
+                        {busy ? (
+                          <button
+                            className="secondary"
+                            disabled={!available}
+                            onClick={() => send("cancel")}
+                          >
+                            停止本轮
+                          </button>
+                        ) : (
+                          <button
+                            className="primary"
+                            disabled={
+                              !draft.trim() ||
+                              !available ||
+                              !session.messages.length
+                            }
+                            onClick={() => send("answer")}
+                          >
+                            发送回答 ↑
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

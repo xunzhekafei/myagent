@@ -2619,16 +2619,27 @@ def _render_transcript_file(path_text: str, tail: int = 80) -> str:
 
 
 def _split_transcript(text: str, max_chars: int = 6000) -> list[str]:
-    """按行把长记录切成若干段（不切在行中间）。"""
+    """按行把长记录切成若干段（不切在行中间，**也不切在代码块中间**）。
+
+    代码块那条尤其要紧：候选人写代码时如果被从中间切断，那一段的评分会看到
+    「代码到此中断」，把完整正确的实现判成没写完。实测出现过——一段正确的
+    手写 AUC 在 `for k in range(i, j + 1):` 之后被切开，实际代码里的
+    rank_sum 累加、循环推进和 return 全在下一段里，却被判成「三样都缺」。
+    代码块本身超过 max_chars 时不强切（宁可这一段大一点）。
+    """
     chunks: list[str] = []
     current: list[str] = []
     size = 0
+    in_fence = False          # 进入本行之前是否处在未闭合的代码块里
     for line in text.splitlines():
-        if size + len(line) + 1 > max_chars and current:
+        opens_or_closes = line.lstrip().startswith("```")
+        if size + len(line) + 1 > max_chars and current and not in_fence:
             chunks.append("\n".join(current))
             current, size = [], 0
         current.append(line)
         size += len(line) + 1
+        if opens_or_closes:
+            in_fence = not in_fence
     if current:
         chunks.append("\n".join(current))
     return chunks or [""]

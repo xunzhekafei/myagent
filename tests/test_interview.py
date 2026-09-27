@@ -379,6 +379,23 @@ def test_split_transcript_keeps_lines_intact(iso):
     assert all(not chunk.startswith("\n") for chunk in chunks)
 
 
+def test_split_transcript_never_cuts_a_code_block(iso):
+    """回归：代码块被切断会让评分以为候选人没写完（真实事故）。
+
+    实测一段**正确**的手写 AUC 被切在 `for k in range(i, j + 1):` 之后，
+    累加 rank_sum、推进循环和 return 全落到了下一段。评分只看第一段，
+    于是报「没有累计 rank_sum、没有更新遍历位置、没有 return」——
+    这三样在代码里明明都有。一块被腰斩的代码看起来就是没写完。
+    """
+    import agent
+    body = "\n".join(f"    x_{i} = compute({i})" for i in range(200))
+    text = f"面试官：写个函数\n候选人：\n```python\n{body}\n```\n面试官：好"
+    chunks = agent._split_transcript(text, max_chars=500)
+    assert len(chunks) > 1                                       # 确实需要切
+    for index, chunk in enumerate(chunks):
+        assert chunk.count("```") % 2 == 0, f"第 {index} 段的代码块被切断了"
+
+
 def test_interview_report_parses_in_chunks(iso, monkeypatch):
     """回归：长记录必须分段解析——整段一次解析会超输出上限被截断（真实事故）。"""
     import agent

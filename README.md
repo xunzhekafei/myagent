@@ -357,9 +357,13 @@ $env:WEB_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
 - **转写不改动会话**：音频只在 `POST /api/sessions/{id}/transcribe` 走一趟，转写完即丢、不落盘；
   文字填进输入框由你确认。所以问答记录里存的仍是你最终提交的文字，
   `input_mode` 保持 `"text"`——服务端在提交时只看到一个字符串，无法区分打字、口述后编辑还是口述未改。
+- **实测数据**（RTX 4060 Laptop 8GB，19 秒中文回答）：模型从缓存加载 5.7 秒、
+  转写 **1.0 秒**（约 19 倍实时）。`initial_prompt` 里带了领域术语偏置——实测不加时
+  「向量召回」会被听成「向梁照回」，加上就对了，而且更快。
 - 相关环境变量：`WHISPER_MODEL`（默认 `large-v3-turbo`；嫌大或嫌慢可设 `small`）、
   `WHISPER_DEVICE`（`auto` / `cuda` / `cpu`）、`WHISPER_LANGUAGE`（默认 `zh`）、
-  `WHISPER_CPU_THREADS`、`WHISPER_MODEL_DIR`。
+  `WHISPER_PROMPT`（覆盖默认的术语词表；设成空串则不传 prompt）、
+  `WHISPER_CPU_THREADS`（默认 6，免得推理吃满所有核、拖慢正在流式的对话）、`WHISPER_MODEL_DIR`。
 
 **还没做**：面试官回复的朗读（TTS）、边说边出字的实时转写、自动判断说话结束与打断。
 `SpeechRecognizer` 协议本身就带 `final` 标记，真流式将来可以直接接上。

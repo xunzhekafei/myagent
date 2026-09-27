@@ -20,8 +20,18 @@ from .speech import Transcript
 
 # large-v3-turbo 的中文准确率明显好于 small，fp16 约 1.6GB，8GB 显存够用
 DEFAULT_MODEL = "large-v3-turbo"
-# 不加这句，Whisper 系列常输出**繁体**——候选人看到繁体字会以为是 bug
-ZH_PROMPT = "以下是普通话的句子。"
+# initial_prompt 干两件事：
+#  1) 开头一句指定普通话，否则 Whisper 系列常输出**繁体**——候选人看到繁体字会以为是 bug；
+#  2) 列出领域术语做偏置。面试回答里全是术语，而 Whisper 对它们很敏感：
+#     实测不列术语时「向量召回」会被听成「向梁照回」，列上就对了，而且更快（少走弯路）。
+#     不列术语还会丢掉句子边界（整段没有标点）。
+# 想换词表用 WHISPER_PROMPT 覆盖；设成空字符串则完全不传 prompt。
+ZH_PROMPT = (
+    "以下是普通话的技术面试回答。"
+    "常见术语：检索增强生成、向量召回、重排序、大模型、微调、推理、量化、"
+    "注意力机制、智能体、提示词、上下文、幻觉、准确率、延迟、吞吐、"
+    "事件循环、闭包、渲染、打包、组件。"
+)
 
 
 def _register_cuda_dlls():
@@ -55,6 +65,8 @@ class WhisperRecognizer:
                          else os.environ.get("WHISPER_LANGUAGE", "zh")) or None
         self.cpu_threads = cpu_threads or int(os.environ.get("WHISPER_CPU_THREADS", "6"))
         self.download_root = os.environ.get("WHISPER_MODEL_DIR") or None
+        # 显式设成空串表示不要 prompt
+        self.prompt = (os.environ.get("WHISPER_PROMPT", ZH_PROMPT) or None) if self.language == "zh" else None
         self._model = None
         # 串行化推理与加载：限制显存/内存占用、避免并发时延迟抖动
         self._lock = threading.RLock()
@@ -106,7 +118,7 @@ class WhisperRecognizer:
             segments, _info = model.transcribe(
                 io.BytesIO(payload),      # 不能传裸 bytes——会被当成文件路径，中文路径上尤其危险
                 language=self.language,
-                initial_prompt=ZH_PROMPT if self.language == "zh" else None,
+                initial_prompt=self.prompt,
                 vad_filter=True,          # 1–2 秒静音正是 Whisper 产生幻觉的地方
                 condition_on_previous_text=False,
             )

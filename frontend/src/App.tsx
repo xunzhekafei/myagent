@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { api, connectSession, transcribe } from "./api";
-import type { Action, Health, Session, SessionSummary } from "./types";
+import type { Action, Health, InputMode, Session, SessionSummary } from "./types";
 import ReportView from "./components/ReportView";
 
 // 录音上限：opus 大约 24–32 kbps，2 分钟还不到 1MB，远低于后端 5MB 的兜底上限
@@ -60,6 +60,9 @@ export default function App() {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [micNote, setMicNote] = useState("");
+  // 草稿里有没有语音转写来的内容。提交时告诉后端，好让评分对术语拼写宽容些
+  // （识别错的不该算候选人说错）。草稿清空时由下面的 effect 复位。
+  const [voiceOrigin, setVoiceOrigin] = useState(false);
   const socket = useRef<WebSocket | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const micStream = useRef<MediaStream | null>(null);
@@ -69,6 +72,7 @@ export default function App() {
     action: Action;
     text: string;
     request_id: string;
+    input_mode: InputMode;
   } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -191,15 +195,21 @@ export default function App() {
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages.at(-1)?.text, view]);
+  // 草稿空了就说明这一条已经交出去（或被清掉），来源标记跟着复位
+  useEffect(() => {
+    if (!draft) setVoiceOrigin(false);
+  }, [draft]);
 
   const send = (action: Action) => {
     if (socket.current?.readyState !== WebSocket.OPEN || pending) return;
     const text = action === "answer" ? draft : "";
+    const inputMode: InputMode =
+      action === "answer" && voiceOrigin ? "voice" : "text";
     const previous = pendingCommand.current;
     const command =
       previous?.action === action && previous.text === text
         ? previous
-        : { action, text, request_id: crypto.randomUUID() };
+        : { action, text, request_id: crypto.randomUUID(), input_mode: inputMode };
     pendingCommand.current = command;
     setPending(true);
     setError("");
@@ -228,6 +238,7 @@ export default function App() {
         return;
       }
       setMicNote("");
+      setVoiceOrigin(true); // 这条草稿含语音转写内容，提交时带上标记
       setDraft((current) => {
         const merged = current.trim()
           ? `${current.trimEnd()}\n${text.trim()}`

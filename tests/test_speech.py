@@ -3,11 +3,14 @@
 不加载真实模型：注入假识别器。这里验证的是**协议与边界**——端点状态码、
 能力声明、会话不被写入、错误不外泄。
 """
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
 import backend.app as app_module
 from backend.app import create_app
+from backend.service import InterviewService
 from backend.speech import Transcript
 
 
@@ -54,6 +57,24 @@ def make_client(tmp_path, recognizer):
 
 def new_session(client):
     return client.post("/api/sessions", json={"candidate": "小明", "role": "AI"}).json()["id"]
+
+
+def wait_done(service, session_id):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        session = service.store.get(session_id)
+        if not session["active_turn"]:
+            return session
+        time.sleep(0.01)
+    pytest.fail("轮次没有结束")
+
+
+def ws_done(ws):
+    for _ in range(150):
+        event = ws.receive_json()
+        if event["type"] == "session.snapshot" and not event["data"]["active_turn"]:
+            return event["data"]
+    pytest.fail("没等到终态快照")
 
 
 # ---------- 能力声明 ----------
@@ -188,6 +209,83 @@ def test_warmup_loads_model_and_flips_ready(tmp_path):
 def test_warmup_disabled_returns_503(tmp_path):
     with make_client(tmp_path, None) as client:
         assert client.post("/api/speech/warmup").status_code == 503
+
+
+# ---------- 语音来源标记：让评分对术语拼写宽容 ----------
+
+def _msg(role, text, status="completed", input_mode="text"):
+    return {"role": role, "text": text, "status": status, "input_mode": input_mode}
+
+
+def test_voice_answers_are_marked_in_transcript():
+    """语音提交的回答要带标注——本地 ASR 会把术语听错，那不该算候选人说错。"""
+    import agent
+    from backend.agent_adapter import answered_transcript
+
+    transcript = answered_transcript([
+        _msg("assistant", "请自我介绍"),
+        _msg("user", "我用 LightGBM 做建模", input_mode="voice"),
+        _msg("assistant", "追问一下"),
+        _msg("user", "这是手打的回答"),
+    ])
+    assert f"候选人（{agent.VOICE_MARK}）：我用 LightGBM 做建模" in transcript
+    assert "候选人：这是手打的回答" in transcript
+    assert f"候选人（{agent.VOICE_MARK}）：这是手打的回答" not in transcript
+
+
+def test_voice_fragment_marks_the_whole_answer():
+    """一条回答分几次提交时，只要有一段来自语音，整条都该标上。"""
+    import agent
+    from backend.agent_adapter import answered_transcript
+
+    transcript = answered_transcript([
+        _msg("assistant", "请继续"),
+        _msg("user", "前半段是语音说的", input_mode="voice"),
+        _msg("user", "后半段补打"),
+    ])
+    assert f"候选人（{agent.VOICE_MARK}）：" in transcript
+    assert "后半段补打" in transcript
+
+
+def test_submit_records_input_mode(tmp_path):
+    service = InterviewService(tmp_path, FakeAgent())
+    try:
+        sid = service.create("甲", "AI", "")["id"]
+        service.submit(sid, action="start", request_id="r" * 8)
+        wait_done(service, sid)
+        service.submit(sid, action="answer", text="语音说的", request_id="s" * 8,
+                       input_mode="voice")
+        session = wait_done(service, sid)
+        modes = {m["role"]: m["input_mode"] for m in session["messages"]}
+        assert modes["user"] == "voice"
+        assert modes["assistant"] == "text"      # 面试官的话永远是文字
+    finally:
+        service.close()
+
+
+def test_command_carries_input_mode_over_websocket(tmp_path):
+    """走一遍真实指令解析——Command 没声明这个字段的话会被 pydantic 静默丢掉。"""
+    with make_client(tmp_path, FakeRecognizer()) as client:
+        sid = new_session(client)
+        with client.websocket_connect(f"/api/sessions/{sid}/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"action": "start", "text": "", "request_id": "a" * 8})
+            ws_done(ws)
+            ws.send_json({"action": "answer", "text": "语音答的", "request_id": "b" * 8,
+                          "input_mode": "voice"})
+            state = ws_done(ws)
+        user = [m for m in state["messages"] if m["role"] == "user"]
+        assert user and user[-1]["input_mode"] == "voice"
+
+
+def test_command_rejects_unknown_input_mode(tmp_path):
+    with make_client(tmp_path, FakeRecognizer()) as client:
+        sid = new_session(client)
+        with client.websocket_connect(f"/api/sessions/{sid}/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"action": "start", "text": "", "request_id": "c" * 8,
+                          "input_mode": "telepathy"})
+            assert ws.receive_json()["type"] == "command.error"
 
 
 # ---------- 真实识别器（离线，不加载模型） ----------

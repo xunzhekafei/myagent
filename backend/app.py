@@ -57,6 +57,11 @@ class Command(BaseModel):
     action: Literal["start", "answer", "finish", "cancel", "retry"]
     text: str = Field(default="", max_length=12000)
     request_id: str = Field(min_length=8, max_length=80)
+    # 只用来告诉评分「这条是语音转写的」——服务端在提交时只拿到一个字符串，
+    # 无法核实它到底是不是语音输入。作为宽容术语拼写的提示足够，别当事实用。
+    # 注意这个模型没设 model_config，pydantic 默认 extra="ignore"：
+    # 客户端多传字段不会报错，只会被静默丢掉。加字段必须同时改这里。
+    input_mode: Literal["text", "voice"] = "text"
 
 
 def create_app(directory=None, adapter=None, recognizer=_AUTO):

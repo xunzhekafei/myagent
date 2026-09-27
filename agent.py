@@ -2550,6 +2550,11 @@ def search_questions(query: str, category: str = "", level: str = "", role: str 
 # -------- 面试评分 workflow：解析问答 → 逐题评分 → 汇总报告 --------
 INTERVIEW_SCORE_DIMENSIONS = ("技术正确性", "深度与原理", "工程与场景思考", "表达与结构")
 
+# 语音转写的回答在打分时会带上这个标注：本地 ASR 会把技术名词听错
+# （实测「风控反欺诈」→「分控反击诈」、「CatBoost 做建模」→「CADBoost 做节目」），
+# 那不算候选人说错。标注由 Web 端按 input_mode 打上，CLI 里没有。
+VOICE_MARK = "语音转写"
+
 INTERVIEW_QA_SCHEMA = {
     "type": "object",
     "properties": {"qa": {"type": "array", "items": {
@@ -2687,7 +2692,9 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
         parsed_chunks.extend(ctx.parallel([
             (lambda chunk=chunk, index=index: ctx.agent(
                 f"把下面这段面试问答记录整理成结构化问答对（第 {index + 1}/{len(chunks)} 段；"
-                "面试官的追问和候选人的回答都要保留，一轮追问算一题）：\n\n" + chunk,
+                "面试官的追问和候选人的回答都要保留，一轮追问算一题。"
+                f"若候选人回答带「{VOICE_MARK}」标注，请在 answer 里**原样保留**这个标注，"
+                "它会影响后面的评分口径）：\n\n" + chunk,
                 schema=INTERVIEW_QA_SCHEMA, label=f"parse:{index}"))
             for index, chunk in enumerate(chunks[start:start + WORKFLOW_MAX_PARALLEL], start)
         ]))
@@ -2703,6 +2710,9 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
             f"你是{role}方向的资深面试官，给下面这道题的候选人回答打分"
             f"（每个维度 0-10 的整数）：\n\n问题：{item['question']}\n\n"
             f"候选人回答：{item['answer']}\n\n"
+            f"注意：带「{VOICE_MARK}」标注的回答是语音识别转出来的文字，"
+            "其中的技术名词拼写、同音字多半是识别错误而不是候选人说错——"
+            "**这类拼写问题不要计入「技术正确性」**；但概念、原理、方案上的错误照常扣分。"
             "evidence 字段必须引用候选人原话；suggestion 给具体改进建议。",
             schema=INTERVIEW_SCORE_SCHEMA, label=f"score:{index}", phase="逐题评分")
         return {"question": item["question"], **scored}

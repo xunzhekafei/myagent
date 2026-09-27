@@ -1,10 +1,12 @@
+export type InputMode = "text" | "voice";
+
 export type Message = {
   id: string;
   turn_id: string;
   role: "user" | "assistant";
   text: string;
   status: "streaming" | "completed" | "interrupted";
-  input_mode: "text" | "voice";
+  input_mode: InputMode;
 };
 export type Report = {
   overall: number;

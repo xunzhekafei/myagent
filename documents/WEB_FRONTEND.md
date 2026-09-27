@@ -97,10 +97,12 @@ HTTP：
 WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 
 ```json
-{"action":"answer","text":"我的回答","request_id":"客户端生成的唯一 ID"}
+{"action":"answer","text":"我的回答","request_id":"客户端生成的唯一 ID","input_mode":"text"}
 ```
 
 支持 `start / answer / finish / cancel / retry`。相同场次的 `request_id` 去重。
+`input_mode` 取 `"text"`（默认）或 `"voice"`，只有 `answer` 用得上——它记录这条回答是否
+由语音转写而来，供评分对术语拼写放宽。传别的值会被 pydantic 拒绝，返回 `command.error`。
 业务事件包含 `type / session_id / turn_id / seq / data`；`seq` 为数据库全局递增序号，允许场次间有间隔。
 事件类型：`turn.started`、`reply.delta`、`reply.completed`、`tool.started`、`tool.completed`、`report.progress`、`report.completed`、`turn.completed`、`turn.cancelled`、`turn.failed`。
 
@@ -130,9 +132,15 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 **与原计划的偏离**：这里原本记的是「扩展 WebSocket 音频事件」。实际改走**独立的 HTTP 端点**
 `POST /api/sessions/{id}/transcribe`，因为音频根本不需要进入会话——转写结果进输入框、由用户确认后
 才以文字提交。这样一次绕开三个障碍：WS 循环只收 `receive_text()`、单条消息 64000 字符上限、
-`Command` 的 `action: Literal[...]` 校验。原计划里的「输入模式校验」和「音频存储策略」因此**不再需要**，
-不是被砍掉而是被绕过了——服务端在提交时只看到一个字符串，无法区分打字与口述，所以
-`input_mode` 保持 `"text"`（`types.ts` 里的 `"voice"` 联合类型保留未用）。
+`Command` 的 `action: Literal[...]` 校验。「音频存储策略」因此**不再需要**——音频根本不落盘。
+
+**关于 `input_mode`（后来补的）**：一开始刻意留空，理由是「服务端在提交时只看到一个字符串，
+无法区分打字与口述，一个核实不了的标记比没有更糟」。这个理由在**准确性**上成立，在**用途**上不成立：
+这个标记不是用来做审计的，只是给评分模型一个「这条是 ASR 转的，术语拼写别太当真」的提示。
+真实报告里出现过代价——候选人的自我介绍因为「分控反击诈」「CADBoost 做节目」这类识别错误被压到
+技术正确性 5 分。所以现在 `answer` 指令带上 `input_mode`（`Literal["text","voice"]`，默认 `text`），
+`answered_transcript()` 会给语音回答加上 `agent.VOICE_MARK` 标注，评分 prompt 据此对拼写放宽，
+但不放过概念性错误。前端在草稿里插入过转写文字就把它标成 `voice`，草稿清空后复位。
 
 几个实现要点：
 

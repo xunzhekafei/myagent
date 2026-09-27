@@ -55,7 +55,7 @@ class InterviewService:
         session.update(status="ready", active_turn=None, error=reason)
         self.store.save(session, event_type, {"message": reason}, turn_id)
 
-    def submit(self, session_id, action, text="", request_id=""):
+    def submit(self, session_id, action, text="", request_id="", input_mode="text"):
         with self.lock:
             session = self.store.get(session_id)
             if request_id in session["requests"]:
@@ -99,7 +99,7 @@ class InterviewService:
             self.cancels[turn_id] = cancel
             # Retry retains the original user answer; never inserts it a second time.
             if action == "answer" and not retry:
-                self._add_message(session, turn_id, "user", text.strip(), "completed")
+                self._add_message(session, turn_id, "user", text.strip(), "completed", input_mode)
             if action != "finish":
                 self._add_message(session, turn_id, "assistant", "", "streaming")
             session.update(active_turn=turn_id, status="scoring" if action == "finish" else "running",
@@ -110,9 +110,12 @@ class InterviewService:
             return session
 
     @staticmethod
-    def _add_message(session, turn_id, role, text, status):
+    def _add_message(session, turn_id, role, text, status, input_mode="text"):
+        # input_mode 只在候选人消息上有意义：面试官的话永远是文字。
+        # 它由客户端声明、服务端无法核实——但作为「这条是语音转写的，术语拼写别太当真」
+        # 的提示足够用了。见 agent.VOICE_MARK。
         session["messages"].append(dict(id=uuid.uuid4().hex, turn_id=turn_id, role=role, text=text,
-                                        status=status, input_mode="text", created_at=now()))
+                                        status=status, input_mode=input_mode, created_at=now()))
 
     def _run(self, snapshot, action, turn_id, cancel):
         session_id = snapshot["id"]

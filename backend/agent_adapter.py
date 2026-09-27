@@ -5,21 +5,32 @@ from pathlib import Path
 
 
 def answered_transcript(messages):
-    """Only pair submitted answers; ending a session is not a blank answer."""
-    pairs = []
+    """Only pair submitted answers; ending a session is not a blank answer.
+
+    语音提交的回答会带上 VOICE_MARK 标注。本地语音识别会把技术名词听错
+    （实测「风控反欺诈」→「分控反击诈」），标注是给评分模型的信号：这类拼写问题
+    大概率是识别造成的，别当成候选人说错。
+    """
+    import agent                                  # 与运行时共用同一个标注常量，避免两处各写一份
+    pairs = []                                    # [问题, 回答, 是否语音提交]
     question = None
     for message in messages:
         if message["status"] != "completed":
             continue
+        voice = message.get("input_mode") == "voice"
         if message["role"] == "assistant":
             question = message["text"]
         elif question is not None:
-            pairs.append([question, message["text"]])
+            pairs.append([question, message["text"], voice])
             question = None
         elif pairs:
             # A second submitted fragment after a failed/interrupted reply.
             pairs[-1][1] += "\n" + message["text"]
-    return "\n\n".join(f"面试官：{question}\n候选人：{answer}" for question, answer in pairs)
+            pairs[-1][2] = pairs[-1][2] or voice
+    return "\n\n".join(
+        f"面试官：{question}\n"
+        f"候选人{'（' + agent.VOICE_MARK + '）' if voice else ''}：{answer}"
+        for question, answer, voice in pairs)
 
 
 class InterviewAgent:

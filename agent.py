@@ -2036,9 +2036,10 @@ def _workflow_agent_call(prompt: str, schema: dict | None, label: str, stats: di
         prompt = (prompt + "\n\n只返回匹配下面 JSON Schema 的 JSON 对象，不要任何多余文字：\n"
                   + json.dumps(schema, ensure_ascii=False))
 
-    def call(extra: str = "") -> str:
+    def call(extra: str = "", max_tokens: int = MAX_OUTPUT_TOKENS) -> tuple[str, bool]:
+        """返回 (文本, 是否被输出上限截断)。"""
         response = (api_client or client).messages.create(
-            model=MODEL, max_tokens=8000, system=system,  # 思考也吃配额，留足空间让 JSON 写完
+            model=MODEL, max_tokens=max_tokens, system=system,
             messages=[{"role": "user", "content": prompt + extra}],
         )
         stats["agents"] += 1
@@ -2046,17 +2047,31 @@ def _workflow_agent_call(prompt: str, schema: dict | None, label: str, stats: di
         if usage is not None:
             stats["tokens"] += int(getattr(usage, "input_tokens", 0) or 0)
             stats["tokens"] += int(getattr(usage, "output_tokens", 0) or 0)
-        return "".join(_block_text(b) for b in response.content if _btype(b) == "text")
+        text = "".join(_block_text(b) for b in response.content if _btype(b) == "text")
+        return text, response.stop_reason == "max_tokens"
 
-    reply = call()
+    reply, truncated = call()
     if schema is None:
         return reply
+    # 子 agent 必须交出**完整** JSON。这里的思考同样吃输出配额，而输入段又不短
+    # （_split_transcript 每段 6000 字符）：实测一段 6000 字符的记录能让思考把
+    # 8000 token 配额全部吃光、正文一个字都不剩，于是重试也照样失败。
+    # 所以被截断就加预算**重来**——不能像主循环那样「续写」，JSON 拼一半没有意义。
+    budget = MAX_OUTPUT_TOKENS
+    while truncated and budget < MAX_OUTPUT_TOKENS_CAP:
+        budget = min(budget * 2, MAX_OUTPUT_TOKENS_CAP)
+        print(f"[workflow] {label} 输出被截断，上限提高到 {budget} 后重试")
+        reply, truncated = call(max_tokens=budget)
     value = _extract_json_object(reply)
     error = _validate_json_schema(value, schema) if value is not None else "没有找到 JSON 对象"
     if error is None:
         return value
     # 子 agent 的输出也不能全信：提醒一次重试，仍不合法就报错
-    retry_reply = call(f"\n\n上次输出不合法（{error}），请只返回合法 JSON。")
+    retry_reply, retry_truncated = call(f"\n\n上次输出不合法（{error}），请只返回合法 JSON。",
+                                        max_tokens=MAX_OUTPUT_TOKENS_CAP)
+    if retry_truncated:
+        raise WorkflowInputError(
+            f"子 agent({label}) 输出被 {MAX_OUTPUT_TOKENS_CAP} token 上限截断，拿不到完整 JSON")
     value = _extract_json_object(retry_reply)
     error = _validate_json_schema(value, schema) if value is not None else "没有找到 JSON 对象"
     if error:

@@ -33,6 +33,18 @@ def answered_transcript(messages):
         for question, answer, voice in pairs)
 
 
+def _web_client(agent):
+    """Web 路径用的模型客户端。
+
+    **超时不能设短。** 报告生成是分钟级的：实测单次解析（6000 字符的问答段落 + 长 JSON）
+    要 70–90 秒。原来写死 60 秒，结果报告必然失败——真实事故，连着两次都报
+    「暂时无法连接模型服务或请求超时」，看着像网络问题，实际是我们自己先挂断了。
+    """
+    return agent.client.with_options(
+        timeout=float(os.environ.get("WEB_LLM_TIMEOUT", "300")),
+        max_retries=int(os.environ.get("WEB_LLM_RETRIES", "1")))
+
+
 class InterviewAgent:
     def configured(self):
         return bool(os.environ.get("ANTHROPIC_API_KEY"))
@@ -70,7 +82,7 @@ class InterviewAgent:
                                 tools=[tool.to_dict() for tool in tools],
                                 handlers={tool.name: tool.call for tool in tools},
                                 event_sink=emit, cancel_event=cancel, isolated=True,
-                                api_client=agent.client.with_options(timeout=60, max_retries=1),
+                                api_client=_web_client(agent),
                                 # 压缩归档写进场次自己的目录，不混进 CLI 的 .transcripts/
                                 archive_dir=(Path(directory) / "transcripts") if directory else None)
 
@@ -90,7 +102,7 @@ class InterviewAgent:
             if cancel.is_set():
                 raise InterruptedError("评分已取消")
             result = agent._workflow_agent_call(prompt, schema, label, stats,
-                                                api_client=agent.client.with_options(timeout=60, max_retries=1))
+                                                api_client=_web_client(agent))
             if cancel.is_set():
                 raise InterruptedError("评分已取消")
             return result

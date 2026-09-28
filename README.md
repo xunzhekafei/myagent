@@ -337,6 +337,9 @@ npm run format
 | `ANTHROPIC_API_KEY` | DeepSeek 密钥，由后端或 CLI 进程环境读取 |
 | `AUX_MODEL` | CLI 辅助模型，默认 `claude-haiku-4-5` |
 | `WEB_ALLOWED_ORIGINS` | Web 允许的来源，逗号分隔；默认允许 localhost / 127.0.0.1 的 8000 和 5173 端口 |
+| `WEB_LLM_TIMEOUT` | Web 端模型调用超时（秒），默认 300。**别调小**——报告生成是分钟级的，见下面的常见问题 |
+| `WEB_LLM_RETRIES` | Web 端 SDK 重试次数，默认 1 |
+| `WEB_SPEECH` | 设 `off` 关闭语音转文字（装了依赖但不想用时） |
 | `agent.py` 中的 `MODEL` | 主模型请求名，当前为 `claude-opus-5` |
 | `agent.py` 中的 `base_url` | 默认 `https://api.deepseek.com/anthropic` |
 
@@ -357,7 +360,22 @@ $env:WEB_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
 
 前后端开发模式若更改后端端口，还需修改 `frontend/vite.config.ts` 的代理目标。
 
-**停止本轮后下一轮没有立即回复**：旧模型请求可能仍在退出，Web 使用单执行队列；网络调用配置 60 秒超时和最多一次 SDK 重试。
+**停止本轮后下一轮没有立即回复**：旧模型请求可能仍在退出，Web 使用单执行队列；
+网络调用默认 300 秒超时、最多一次 SDK 重试（`WEB_LLM_TIMEOUT` / `WEB_LLM_RETRIES` 可调）。
+
+**报告生成报「暂时无法连接模型服务或请求超时」**：**先别查网络**——多半是我们自己的客户端
+超时，不是网断了。报告生成是分钟级的，光解析一段 6000 字的问答记录就要 70–90 秒，
+整份报告通常 3–5 分钟。
+
+怎么分清是哪种：看后端日志（自己的终端，或 `.web-data/web.log`）里的**异常类型和耗时**。
+
+| 日志里看到 | 说明 | 怎么办 |
+| --- | --- | --- |
+| `APITimeoutError`，且耗时正好卡在 60 / 300 秒这种整数上 | 是我们设的超时，请求本身还在正常跑 | 调大 `WEB_LLM_TIMEOUT`（默认 300 秒）后重启 |
+| `APIConnectionError`（连不上、DNS 解析失败、TLS 握手失败） | 才是真的网络问题 | 检查代理 / 网络后重试 |
+
+这类问题**只在慢的时候暴露**：机器快、回答短的时候永远测不出来。
+所以要判断"是网络还是我们"，看耗时是不是恰好等于某个超时设定值——这是最直接的线索。
 
 **部署范围**：当前使用一个 Uvicorn worker，仅面向本地使用。账户鉴权、多用户权限和多进程队列尚未实现。
 

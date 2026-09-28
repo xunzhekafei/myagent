@@ -51,6 +51,8 @@ class SessionInput(BaseModel):
     candidate: str = Field(min_length=1, max_length=80)
     role: str = Field(min_length=1, max_length=120)
     background: str = Field(default="", max_length=8000)
+    # 面试压力档位，各档规则见 skills/mock-interviewer/SKILL.md
+    pressure: Literal["温和", "标准", "压力"] = "标准"
 
 
 class Command(BaseModel):

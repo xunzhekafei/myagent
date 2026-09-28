@@ -133,3 +133,22 @@ def test_user_command(iso):
     assert "李四" in agent._handle_user_command("/user 李四")
     assert agent._handle_user_command("/user") is None      # 查询不改变名字
     assert agent.SESSION_USER == "李四"
+
+
+def test_pressure_command(iso):
+    """压力档位是会话级设置，各档规则写在技能里，这里只负责告诉模型当前是哪一档。"""
+    import agent
+    assert agent.SESSION_PRESSURE == "标准"                  # 默认档
+
+    notice = agent._handle_pressure_command("/pressure 压力")
+    assert agent.SESSION_PRESSURE == "压力" and "压力" in notice
+
+    assert agent._handle_pressure_command("/pressure") is None     # 查询不改变档位
+    assert agent.SESSION_PRESSURE == "压力"
+
+    # 非法档位只提示、不改变现状
+    assert agent._handle_pressure_command("/pressure 狂暴") is None
+    assert agent.SESSION_PRESSURE == "压力"
+
+    assert "温和" in agent._handle_pressure_command("/pressure 温和")
+    assert agent.SESSION_PRESSURE == "温和"

@@ -40,6 +40,7 @@ def iso(tmp_path, monkeypatch):
     monkeypatch.setattr(agent, "SESSION_FILE", tmp_path / "sessions" / "latest.json")
     monkeypatch.setattr(agent, "session_history", [])
     monkeypatch.setattr(agent, "SESSION_USER", "")
+    monkeypatch.setattr(agent, "SESSION_PRESSURE", agent.DEFAULT_PRESSURE)
     monkeypatch.setattr(agent, "QUESTION_BANK_PATH", tmp_path / "ai_questions.json")
     monkeypatch.setattr(agent, "_QUESTION_CACHE", None)
     monkeypatch.setattr(agent, "INTERVIEWS_DIR", tmp_path / "interviews")

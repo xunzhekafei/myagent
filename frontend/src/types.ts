@@ -28,8 +28,11 @@ export type SessionSummary = {
   created_at: string;
   status: string;
 };
+export type Pressure = "温和" | "标准" | "压力";
+
 export type Session = SessionSummary & {
   background: string;
+  pressure?: Pressure;
   messages: Message[];
   report: Report | null;
   active_turn: string | null;

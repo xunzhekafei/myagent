@@ -80,6 +80,49 @@ def test_web_interview_and_report_reconnect(tmp_path):
         assert client.get(url).json()["report"]["overall"] == 8
 
 
+def test_session_records_pressure_and_rejects_unknown(tmp_path):
+    with TestClient(create_app(tmp_path, FakeAgent(), recognizer=None)) as client:
+        chosen = client.post("/api/sessions", json={"candidate": "甲", "role": "AI",
+                                                    "pressure": "压力"})
+        assert chosen.status_code == 201 and chosen.json()["pressure"] == "压力"
+
+        default = client.post("/api/sessions", json={"candidate": "乙", "role": "AI"})
+        assert default.json()["pressure"] == "标准"          # 不传就是默认档
+
+        bad = client.post("/api/sessions", json={"candidate": "丙", "role": "AI",
+                                                 "pressure": "狂暴"})
+        assert bad.status_code == 422                        # 只认技能里定义的三档
+
+
+def test_adapter_tells_the_interviewer_which_pressure_level(tmp_path, monkeypatch):
+    """档位必须真的进到系统提示里——否则技能无从得知该按哪一档提问。"""
+    import agent as agent_module
+    from backend.agent_adapter import InterviewAgent
+
+    captured = {}
+    monkeypatch.setattr(agent_module, "agent_loop",
+                        lambda messages, **kw: captured.update(system=kw.get("system", "")) or "好的")
+    session = {"id": "s1", "candidate": "甲", "role": "AI", "background": "",
+               "pressure": "压力",
+               "messages": [{"role": "assistant", "text": "请自我介绍", "status": "completed"}]}
+    InterviewAgent().reply(session, lambda *a, **k: None, threading.Event(), tmp_path)
+    assert "压力" in captured["system"]
+
+
+def test_adapter_defaults_pressure_for_older_sessions(tmp_path, monkeypatch):
+    """这次改动之前建的场次没有 pressure 字段，不能因此报错。"""
+    import agent as agent_module
+    from backend.agent_adapter import InterviewAgent
+
+    captured = {}
+    monkeypatch.setattr(agent_module, "agent_loop",
+                        lambda messages, **kw: captured.update(system=kw.get("system", "")) or "好的")
+    session = {"id": "s2", "candidate": "甲", "role": "AI", "background": "",
+               "messages": [{"role": "assistant", "text": "请自我介绍", "status": "completed"}]}
+    InterviewAgent().reply(session, lambda *a, **k: None, threading.Event(), tmp_path)
+    assert "标准" in captured["system"]
+
+
 def test_sessions_do_not_share_transcript(tmp_path):
     service = InterviewService(tmp_path, FakeAgent())
     try:

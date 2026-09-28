@@ -3987,6 +3987,35 @@ def _handle_user_command(text: str) -> str | None:
     return _user_notice()
 
 
+# ---- 面试压力档位：会话级设置，各档的具体规则写在 mock-interviewer 技能里 ----
+# 这里只负责「告诉模型当前是哪一档」，不重复规则——规则属于面试方法论。
+PRESSURE_LEVELS = ("温和", "标准", "压力")
+DEFAULT_PRESSURE = "标准"
+SESSION_PRESSURE = DEFAULT_PRESSURE
+
+
+def _pressure_notice(level: str | None = None) -> str:
+    """追加进对话的系统提示：说明本次面试用哪个压力档位。"""
+    return (f"（系统提示：本次面试的压力档位是「{level or SESSION_PRESSURE}」——"
+            "按 mock-interviewer 技能里对应档位的规则提问）")
+
+
+def _handle_pressure_command(text: str) -> str | None:
+    """处理 /pressure 命令。设置档位时返回要追加进对话的系统提示，否则返回 None。"""
+    global SESSION_PRESSURE
+    value = text[len("/pressure"):].strip()
+    if not value:
+        print(f"[Session] 当前压力档位：{SESSION_PRESSURE}"
+              f"（可选：{'、'.join(PRESSURE_LEVELS)}）")
+        return None
+    if value not in PRESSURE_LEVELS:
+        print(f"[Session] 档位只能是：{'、'.join(PRESSURE_LEVELS)}")
+        return None
+    SESSION_PRESSURE = value
+    print(f"[Session] 压力档位已设为：{value}")
+    return _pressure_notice(value)
+
+
 def _serialize_messages(messages: list) -> list:
     """消息 → 纯 JSON 结构（SDK block 对象转 dict，dict/str 原样保留）。"""
     out = []
@@ -4133,7 +4162,8 @@ def chat_loop() -> None:
     start_runtime_threads()
     threading.Thread(target=_stdin_reader_loop, daemon=True).start()
     _STDIN_READER_STARTED = True
-    print("=== Agent 已就绪（exit 退出，/clear 清空会话，/user 名字 设置候选人）===")
+    print("=== Agent 已就绪（exit 退出，/clear 清空会话，/user 名字 设置候选人，"
+          "/pressure 档位 设置面试压力）===")
     if session_history:
         print(f"[Session] 已恢复上次会话：{len(session_history)} 条消息")
         print("[Session] 继续上次话题直接说；**开始新任务（如新一场面试）前建议先 /clear**，"
@@ -4184,11 +4214,20 @@ def chat_loop() -> None:
                     session_history.append({"role": "user", "content": notice})
                     _save_session()
                 continue
+            if question.startswith("/pressure"):
+                notice = _handle_pressure_command(question)
+                if notice:
+                    session_history.append({"role": "user", "content": notice})
+                    _save_session()
+                continue
             if question.lower() in ("/clear", "/new"):
                 session_history = _clear_session()
                 print("[Session] 已清空当前会话（长期记忆 .memory/ 不受影响）")
                 if SESSION_USER:  # 清空后补回候选人信息，不用再 /user 一次
                     session_history.append({"role": "user", "content": _user_notice()})
+                    _save_session()
+                if SESSION_PRESSURE != DEFAULT_PRESSURE:   # 档位同理
+                    session_history.append({"role": "user", "content": _pressure_notice()})
                     _save_session()
                 continue
             if question.startswith("/goal"):

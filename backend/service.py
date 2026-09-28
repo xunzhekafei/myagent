@@ -40,10 +40,10 @@ class InterviewService:
             if session["active_turn"]:
                 self._interrupt(session, "服务已重启，本轮未完成。可重试。")
 
-    def create(self, candidate, role, background):
+    def create(self, candidate, role, background, pressure="标准"):
         session = dict(id=uuid.uuid4().hex, candidate=candidate, role=role, background=background,
-                       created_at=now(), status="ready", active_turn=None, messages=[], report=None,
-                       seq=0, error=None, last_action=None, requests=[])
+                       pressure=pressure, created_at=now(), status="ready", active_turn=None,
+                       messages=[], report=None, seq=0, error=None, last_action=None, requests=[])
         self.store.save(session)
         return session
 

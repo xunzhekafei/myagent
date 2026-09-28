@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { api, connectSession, transcribe } from "./api";
-import type { Action, Health, InputMode, Session, SessionSummary } from "./types";
+import type { Action, Health, InputMode, Pressure, Session, SessionSummary } from "./types";
 import ReportView from "./components/ReportView";
 
 // 录音上限：opus 大约 24–32 kbps，2 分钟还不到 1MB，远低于后端 5MB 的兜底上限
@@ -54,6 +54,7 @@ export default function App() {
   const [candidate, setCandidate] = useState("");
   const [role, setRole] = useState("AI / ML 工程师");
   const [background, setBackground] = useState("");
+  const [pressure, setPressure] = useState<Pressure>("标准");
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState(false);
   const [view, setView] = useState<"chat" | "report">("chat");
@@ -299,6 +300,7 @@ export default function App() {
         candidate,
         role,
         background,
+        pressure,
       });
       await refresh();
       setSelected(s.id);
@@ -452,6 +454,14 @@ export default function App() {
                   <option>数据分析师</option>
                   <option>后端开发工程师</option>
                   <option>前端开发工程师</option>
+                </select>
+              </label>
+              <label>
+                面试压力
+                <select value={pressure} onChange={(e) => setPressure(e.target.value as Pressure)}>
+                  <option value="温和">温和 — 适合练习，卡住时会给方向提示</option>
+                  <option value="标准">标准 — 质疑数字和空话，但不逼问（默认）</option>
+                  <option value="压力">压力面 — 连珠追问、质疑前提、不让喘</option>
                 </select>
               </label>
               <label>

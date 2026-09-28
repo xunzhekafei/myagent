@@ -88,7 +88,7 @@ HTTP：
 | --- | --- |
 | `GET /api/health` | 密钥是否配置、语音能力 |
 | `GET /api/sessions` | 场次列表 |
-| `POST /api/sessions` | 创建场次：`candidate / role / background` |
+| `POST /api/sessions` | 创建场次：`candidate / role / background / pressure`。`pressure` 取 `温和` / `标准`（默认）/ `压力`，只认这三档，别的值返回 422 |
 | `GET /api/sessions/{id}` | 完整场次快照 |
 | `GET /api/sessions/{id}/report` | 评分报告 |
 | `POST /api/sessions/{id}/transcribe` | 语音转文字：body 是原始音频字节，返回 `{text, utterance_id}`。**不写入会话**、不落盘。状态码：404 场次不存在 / 409 已结束 / 503 未启用语音 / 413 超限 / 415 类型不支持 |

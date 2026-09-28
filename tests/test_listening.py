@@ -269,7 +269,7 @@ def test_skill_section_extracts_only_what_the_judge_needs():
 
 
 def test_interrupted_answer_is_marked_in_transcript():
-    """被打算断的回答要能看出「说到哪被打断了」——评分才知道没答完不是他的问题。"""
+    """被打断的回答要能看出「说到哪被打断了」——评分才知道没答完不是他的问题。"""
     import agent
     from backend.agent_adapter import answered_transcript
 

@@ -7,6 +7,8 @@ export type Message = {
   text: string;
   status: "streaming" | "completed" | "interrupted";
   input_mode: InputMode;
+  /** 被面试官中途打断的回答：天生不完整，评分时不因「没答完」扣分 */
+  interrupted?: boolean;
 };
 export type Report = {
   overall: number;

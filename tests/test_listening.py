@@ -22,6 +22,7 @@ class FakeAdapter:
     def __init__(self, verdict=None):
         self.verdict = verdict          # 判断器要返回的打断语，None = 不打断
         self.judged = []                # 每次都记下被判断的文本
+        self.contexts = []              # 以及给判断器的上下文
 
     def configured(self):
         return True
@@ -32,8 +33,9 @@ class FakeAdapter:
     def report(self, session, emit, cancel, directory):
         return {"overall": 8}
 
-    def judge_interrupt(self, partial, pressure):
+    def judge_interrupt(self, partial, pressure, context):
         self.judged.append((partial, pressure))
+        self.contexts.append(context)
         return self.verdict
 
 
@@ -148,6 +150,7 @@ def test_interrupt_records_both_messages(tmp_path, fast):
     # 落库的那半截必须**正是判断时看到的那段**——不是更早的、也不是更晚的
     assert stored["messages"][-2]["text"] == adapter.judged[-1][0]
     assert stored["messages"][-2]["input_mode"] == "voice"
+    assert stored["messages"][-2]["interrupted"] is True   # 评分要知道它天生不完整
     assert stored["messages"][-1]["role"] == "assistant"
     assert "Flink" in stored["messages"][-1]["text"]
     service.close()
@@ -231,6 +234,106 @@ def test_interrupt_dropped_on_completed_session(tmp_path, fast):
 
     assert service.interrupt_with(session["id"], "半截", "停一下？", anchor) is False
     service.close()
+
+
+# ---------- 判断器的上下文与代码侧兜底 ----------
+
+def test_context_carries_role_and_recent_pairs(tmp_path, fast):
+    adapter = FakeAdapter()
+    service, session = make_service(tmp_path, adapter)
+    recognizer = FakeRecognizer(["一个足够长的回答，带句号。"])
+
+    listen = ListenSession(session["id"], anchor_of(session), "标准",
+                           service=service, recognizer=recognizer, judge=adapter.judge_interrupt)
+    listen.append(b"x" * 100)
+    listen.start()
+    wait_for(lambda: adapter.contexts, what="一次判断")
+
+    context = adapter.contexts[0]
+    assert context["role"] == "AI"
+    assert context["question"] == session["messages"][-1]["text"]
+    assert context["recent"] == []
+    service.close()
+
+
+def test_skill_section_extracts_only_what_the_judge_needs():
+    """整份技能塞进判断 prompt 会让它回「请继续」——那条碎片输入规则。"""
+    from backend.agent_adapter import _skill_section
+    skill = ("## 压力档位\n档位说明\n### 温和\n不主动加压\n\n"
+             "## 语言与语气\n- 碎片输入：回一句「请继续」\n\n"
+             "## 追问工具箱\n按 Claim 追\n")
+    tiers = _skill_section(skill, "## 压力档位")
+    assert "### 温和" in tiers and "碎片输入" not in tiers
+    assert "请继续" not in _skill_section(skill, "## 追问工具箱")
+    assert _skill_section(skill, "## 不存在的节") == ""
+
+
+def test_interrupted_answer_is_marked_in_transcript():
+    """被打算断的回答要能看出「说到哪被打断了」——评分才知道没答完不是他的问题。"""
+    import agent
+    from backend.agent_adapter import answered_transcript
+
+    transcript = answered_transcript([
+        {"role": "assistant", "text": "请自我介绍", "status": "completed", "input_mode": "text"},
+        {"role": "user", "text": "我做的是检索增强。", "status": "completed",
+         "input_mode": "voice", "interrupted": True},
+        {"role": "assistant", "text": "停一下，先解释这个。", "status": "completed",
+         "input_mode": "text"},
+    ])
+    assert f"候选人（{agent.VOICE_MARK}·{agent.INTERRUPT_MARK}）" in transcript
+    assert "我做的是检索增强。" in transcript
+
+
+def test_plain_answers_carry_no_interrupt_mark():
+    import agent
+    from backend.agent_adapter import answered_transcript
+
+    transcript = answered_transcript([
+        {"role": "assistant", "text": "请自我介绍", "status": "completed", "input_mode": "text"},
+        {"role": "user", "text": "手打的完整回答。", "status": "completed", "input_mode": "text"},
+    ])
+    assert agent.INTERRUPT_MARK not in transcript
+    assert "候选人：手打的完整回答。" in transcript
+
+
+def test_judge_system_drops_the_fragment_rule():
+    """整份技能塞进去，判断最可能的输出之一就是「请继续」——那条规则必须被抽掉。"""
+    from backend.agent_adapter import _judge_system
+
+    system = _judge_system("AI", "标准", "（档位）", "（工具箱）")
+    assert "请继续" not in system
+    assert "绝大多数情况应该是 false" in system
+    assert "打断一下" in system                       # 明确禁止元话语
+
+
+def test_judge_screens_bad_model_output(monkeypatch):
+    """打桩模型回复，验证**真正**的校验分支——prompt 里写了也拦不住。"""
+    from types import SimpleNamespace
+    import agent as agent_module
+    from backend.agent_adapter import InterviewAgent
+
+    reply = {"text": ""}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(content=[SimpleNamespace(type="text", text=reply["text"])])
+
+    monkeypatch.setattr(agent_module, "client", SimpleNamespace(messages=FakeMessages()))
+    judge = InterviewAgent().judge_interrupt
+    context = {"role": "AI", "question": "请自我介绍", "recent": []}
+
+    for bad in (
+        '{"interrupt": false, "question": "这是什么？"}',   # 判断结果是「不打断」
+        '{"interrupt": true, "question": "你继续说"}',      # 不是问句
+        '{"interrupt": true, "question": "请继续？"}',      # 正是那条碎片规则的产物
+        '{"interrupt": true}',                              # 少了 question
+        "完全不是 JSON",
+    ):
+        reply["text"] = bad
+        assert judge("说到一半的内容", "标准", context) is None, bad
+
+    reply["text"] = '{"interrupt": true, "question": "这个数字怎么算的？"}'
+    assert judge("说到一半的内容", "标准", context) == "这个数字怎么算的？"
 
 
 # ---------- 管理器：一个场次只能有一个监听 ----------

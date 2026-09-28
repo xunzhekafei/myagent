@@ -181,10 +181,31 @@ class ListenSession:
         判断失败一律当作「不打断」——安全降级，宁可漏也不能误伤。
         """
         try:
-            return self.judge(partial, self.pressure)
+            return self.judge(partial, self.pressure, self._context())
         except Exception:
             logger.exception("打断判断失败，本轮不打断")
             return None
+
+    def _context(self) -> dict:
+        """判断需要的上下文：当前问题 + 最近两轮问答。
+
+        只给最近两轮——判断器要的是「他有没有答非所问 / 自相矛盾」，
+        给多了既费 token 又容易让它去纠结更早的内容。
+        """
+        session = self.service.store.get(self.session_id)
+        question = ""
+        pairs: list[tuple[str, str]] = []
+        for message in session["messages"]:
+            if message["status"] != "completed":
+                continue
+            if message["role"] == "assistant":
+                question = message["text"]
+            elif question:
+                pairs.append((question, message["text"]))
+                question = ""
+        return {"role": session.get("role") or "技术",
+                "question": question or (pairs[-1][0] if pairs else ""),
+                "recent": pairs[-2:]}
 
 
 class ListenManager:

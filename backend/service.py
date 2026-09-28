@@ -76,6 +76,8 @@ class InterviewService:
                 return False                      # 已经翻到下一题了，别插
             turn_id = uuid.uuid4().hex
             self._add_message(session, turn_id, "user", answer_text, "completed", "voice")
+            # 标记它天生不完整——评分时不能因为「没答完」扣分
+            session["messages"][-1]["interrupted"] = True
             self._add_message(session, turn_id, "assistant", question_text, "completed")
             session["status"] = "ready"
             self.store.save(session, "interview.interrupted",

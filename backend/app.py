@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .listening import ListenManager
 from .service import InterviewService
 from .speech import CAPABILITIES
 
@@ -73,9 +74,18 @@ def create_app(directory=None, adapter=None, recognizer=_AUTO):
         # 语音能力在启动时解析一次：_AUTO → 按环境试建；显式 None → 关闭语音。
         # 这里只构建识别器对象，**不加载模型**（首次转写或预热接口才加载）。
         app.state.recognizer = _build_recognizer() if recognizer is _AUTO else recognizer
+        # 中途打断靠「边录边滚动转写」，所以要有识别器；判断能力挂在 adapter 上。
+        # 两者缺一就没有监听功能，端点会明确返回 503 而不是 500。
+        judge = getattr(app.state.service.adapter, "judge_interrupt", None)
+        app.state.listener = (ListenManager(app.state.service, app.state.recognizer, judge)
+                              if app.state.recognizer is not None and judge is not None else None)
         try:
             yield
         finally:
+            # **先停监听线程再关 service**：判断线程还在跑时会去读 sqlite，
+            # 撞上已关闭的连接会抛 ProgrammingError。
+            if app.state.listener is not None:
+                await asyncio.to_thread(app.state.listener.close)
             await asyncio.to_thread(app.state.service.close)
 
     app = FastAPI(title="Interview Studio", lifespan=lifespan)
@@ -173,6 +183,51 @@ def create_app(directory=None, adapter=None, recognizer=_AUTO):
             logging.getLogger(__name__).exception("Transcribe failed for session %s", session_id)
             raise HTTPException(500, "语音识别失败，请检查后端日志")
         return {"text": text, "utterance_id": utterance_id}
+
+    @app.post("/api/sessions/{session_id}/listen", status_code=201)
+    def start_listening(session_id: str):
+        """开始「边录边听」：之后每块音频 POST 到 .../listen/{id}/audio，面试官可能中途插话。"""
+        listener = app.state.listener
+        if listener is None:
+            raise HTTPException(503, "本机未启用语音识别（需装 requirements-speech.txt）")
+        recognizer = app.state.recognizer
+        if not recognizer.ready():
+            # 第一轮滚动重转会在录音期间触发模型加载（首次还要下载），而且全程握着识别器的锁——
+            # 候选人此时按「停止录音」，他自己的转写会被卡住。所以要求先预热。
+            raise HTTPException(409, "语音模型尚未加载，请先调用 /api/speech/warmup")
+        session = get_session(session_id)
+        if session["status"] == "completed":
+            raise HTTPException(409, "这场面试已完成")
+        messages = session["messages"]
+        if not messages or messages[-1].get("role") != "assistant":
+            raise HTTPException(409, "现在没有待回答的问题")
+        listen = listener.start(session_id, messages[-1]["id"],
+                                session.get("pressure") or "标准")
+        return {"listen_id": listen.listen_id}
+
+    @app.post("/api/sessions/{session_id}/listen/{listen_id}/audio")
+    async def push_audio(session_id: str, listen_id: str, request: Request):
+        """追加一块音频。块是 webm 流的片段，不是独立文件——后端只做追加。"""
+        listener = app.state.listener
+        if listener is None:
+            raise HTTPException(503, "本机未启用语音识别")
+        listen = listener.get(session_id, listen_id)
+        if listen is None:
+            raise HTTPException(404, "监听会话不存在或已结束")
+        payload = await request.body()
+        if payload:
+            try:
+                listen.append(payload)
+            except ValueError as error:
+                raise HTTPException(413, str(error))
+        return {"received": len(payload)}
+
+    @app.delete("/api/sessions/{session_id}/listen/{listen_id}")
+    def stop_listening(session_id: str, listen_id: str):
+        listener = app.state.listener
+        if listener is None:
+            raise HTTPException(503, "本机未启用语音识别")
+        return {"stopped": listener.stop(session_id, listen_id)}
 
     @app.post("/api/speech/warmup")
     async def warmup():

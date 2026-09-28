@@ -55,6 +55,33 @@ class InterviewService:
         session.update(status="ready", active_turn=None, error=reason)
         self.store.save(session, event_type, {"message": reason}, turn_id)
 
+    def interrupt_with(self, session_id, answer_text, question_text, anchor_id):
+        """面试官在候选人说到一半时插话：把已经说的那半截记为回答，插话记为面试官的话。
+
+        返回是否真的打断了。**不设 session["error"]**——前端只要 error 非空就会渲染
+        「重试」按钮，点一下会拿旧回答重放上一轮。
+
+        锚点检查是这里的重点：`answered_transcript` 是「面试官的话配**下一条**候选人消息」，
+        如果候选人已经答完、模型已经问了下一题，此时插话会把那半截回答算到**新问题**上，
+        而他接着的回答又落到插话下面——配对全乱。这个窗口不是毫秒级，是整个确认 + 生成的几十秒。
+        """
+        with self.lock:
+            session = self.store.get(session_id)
+            if session["active_turn"] or session["status"] == "completed":
+                return False
+            messages = session["messages"]
+            if not messages or messages[-1].get("role") != "assistant":
+                return False
+            if messages[-1].get("id") != anchor_id:
+                return False                      # 已经翻到下一题了，别插
+            turn_id = uuid.uuid4().hex
+            self._add_message(session, turn_id, "user", answer_text, "completed", "voice")
+            self._add_message(session, turn_id, "assistant", question_text, "completed")
+            session["status"] = "ready"
+            self.store.save(session, "interview.interrupted",
+                            {"question": question_text, "transcript": answer_text}, turn_id)
+            return True
+
     def submit(self, session_id, action, text="", request_id="", input_mode="text"):
         with self.lock:
             session = self.store.get(session_id)

@@ -86,6 +86,14 @@ class InterviewAgent:
                                 # 压缩归档写进场次自己的目录，不混进 CLI 的 .transcripts/
                                 archive_dir=(Path(directory) / "transcripts") if directory else None)
 
+    def judge_interrupt(self, partial, pressure):
+        """候选人说到一半，判断此刻要不要打断。返回要说的那句话，或 None（继续听）。
+
+        先存根、总是返回 None：这样「音频进 → 滚动转录 → 事件 → 快照」整条链路
+        能在零模型开销下验证。真正的判断在下一步接上。
+        """
+        return None
+
     def report(self, session, emit, cancel, directory: Path):
         agent = self._runtime()
         transcript = answered_transcript(session["messages"])

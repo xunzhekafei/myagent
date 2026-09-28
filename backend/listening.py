@@ -132,6 +132,8 @@ class ListenSession:
             if not text or text == self.transcript:
                 continue
             self.transcript = text
+            print(f"[监听] {self.listen_id[:6]} 已转写 {len(text)} 字"
+                  f"（新增 {len(text) - len(self.judged_text)}）: …{text[-24:]}", flush=True)
             if not self._passes_gates(text):
                 continue
 
@@ -139,6 +141,7 @@ class ListenSession:
             self.judged_text = text
             verdict = self._ask_judge(text)
             if not verdict:
+                print(f"[监听] {self.listen_id[:6]} 判断结果：继续听", flush=True)
                 continue
             if self.service.interrupt_with(self.session_id, text, verdict, self.anchor_id):
                 self.interrupts += 1

@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import { api, connectSession, transcribe } from "./api";
+import {
+  api,
+  connectSession,
+  pushAudio,
+  startListening,
+  stopListening,
+  transcribe,
+  warmupSpeech,
+} from "./api";
 import type { Action, Health, InputMode, Pressure, Session, SessionSummary } from "./types";
 import ReportView from "./components/ReportView";
 
 // 录音上限：opus 大约 24–32 kbps，2 分钟还不到 1MB，远低于后端 5MB 的兜底上限
 const MAX_RECORD_MS = 120_000;
+// 每 2 秒切一块，块既进本地 parts（最后一次转写用），也实时传给后端（边录边听）。
+// 不带这个参数的话 ondataavailable 只在停止时触发一次，后端就永远是「录完才知道说了什么」。
+const RECORD_TIMESLICE_MS = 2_000;
 // 别假设 audio/webm;codecs=opus——Firefox 给 ogg、Safari 给 mp4。让浏览器挑一个它支持的。
 const AUDIO_MIME_CANDIDATES = [
   "audio/webm;codecs=opus",
@@ -64,11 +75,19 @@ export default function App() {
   // 草稿里有没有语音转写来的内容。提交时告诉后端，好让评分对术语拼写宽容些
   // （识别错的不该算候选人说错）。草稿清空时由下面的 effect 复位。
   const [voiceOrigin, setVoiceOrigin] = useState(false);
+  // 「边录边听」是否已建立。只在提示语里用，所以放 state（ref 变化不触发重渲染）
+  const [listening, setListening] = useState(false);
   const socket = useRef<WebSocket | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const micStream = useRef<MediaStream | null>(null);
   const micTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const micAbort = useRef<AbortController | null>(null);
+  // 边录边听：listenRef 同时记住场次和监听 id，收尾时不用再依赖外部的 selected。
+  // 块的 POST 用**自己**的 AbortController——micAbort 是转写用的，别混。
+  const listenRef = useRef<{ sessionId: string; listenId: string } | null>(null);
+  const chunkChain = useRef<Promise<unknown>>(Promise.resolve());
+  const chunkAbort = useRef<AbortController | null>(null);
+  const beepCtx = useRef<AudioContext | null>(null);
   const pendingCommand = useRef<{
     action: Action;
     text: string;
@@ -94,6 +113,31 @@ export default function App() {
     // 不 stop 每一路轨道的话，系统的麦克风指示灯不会灭
     micStream.current?.getTracks().forEach((track) => track.stop());
     micStream.current = null;
+  }, []);
+
+  /** 收掉「边录边听」：停掉在途的块上传，并告诉后端别再判断了。 */
+  const endListening = useCallback(() => {
+    const current = listenRef.current;
+    listenRef.current = null;
+    chunkAbort.current?.abort();
+    chunkAbort.current = null;
+    setListening(false);
+    if (current) stopListening(current.sessionId, current.listenId);
+  }, []);
+
+  /** 面试官插话时的提示音。
+   *  没有 TTS，打断只有屏幕上的气泡——而候选人正在说话，多半没在看屏幕。 */
+  const playInterruptCue = useCallback(() => {
+    const context = beepCtx.current;
+    if (!context) return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 660;
+    gain.gain.value = 0.08;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.18);
   }, []);
 
   const refresh = useCallback(
@@ -164,6 +208,21 @@ export default function App() {
         if (message.type === "report.progress")
           setProgress(`正在生成报告 · ${message.data.stage}`);
         if (message.type === "report.completed") setView("report");
+        if (message.type === "interview.interrupted") {
+          // 面试官在候选人说到一半时插话了。**不转写**——后端已经把那半截存成了回答，
+          // 再转一遍会把它当成新回答提交到插话下面。
+          playInterruptCue();                   // 候选人正交着，多半没看屏幕
+          endListening();
+          micAbort.current?.abort();            // 在途的转写作废，它属于被打断的那条
+          releaseMic();
+          setRecording(false);
+          setTranscribing(false);
+          setMicNote("");
+          setVoiceOrigin(false);
+          setDraft("");                         // 草稿是给原问题的，别留到新问题下面
+          pendingCommand.current = null;
+          setPending(false);
+        }
       };
       ws.onclose = (event) => {
         if (disposed) return;
@@ -188,11 +247,12 @@ export default function App() {
       // 切换场次或卸载时要停下录音并中止在途转写，
       // 否则转写结果会落进另一场次的输入框、麦克风也不会释放
       micAbort.current?.abort();
+      endListening();                           // 别忘了告诉后端别再判断这个场次了
       releaseMic();
       setRecording(false);
       setTranscribing(false);
     };
-  }, [selected, refresh, releaseMic]);
+  }, [selected, refresh, releaseMic, endListening, playInterruptCue]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages.at(-1)?.text, view]);
@@ -271,24 +331,61 @@ export default function App() {
       return;
     }
     micStream.current = stream;
+    chunkAbort.current = new AbortController();
+    // AudioContext 要在用户手势里创建，否则被自动播放策略拦掉
+    if (!beepCtx.current) {
+      try {
+        beepCtx.current = new AudioContext();
+      } catch {
+        beepCtx.current = null;                 // 没有提示音也能用
+      }
+    }
     const mimeType =
       AUDIO_MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type)) || "";
     const active = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     const parts: Blob[] = [];
     active.ondataavailable = (event) => {
-      if (event.data.size) parts.push(event.data);
+      if (!event.data.size) return;
+      parts.push(event.data);                   // 本地留一份，停止时整体转写
+      const current = listenRef.current;
+      if (!current) return;
+      // **必须串行**：fetch 不保证顺序，中间丢一块会让整个 webm 流后面全废
+      const signal = chunkAbort.current?.signal;
+      chunkChain.current = chunkChain.current
+        .then(() => pushAudio(current.sessionId, current.listenId, event.data, signal))
+        .catch(() => {});                       // 尽力而为——本地那份还在，最终转写不受影响
     };
     active.onstop = () => {
       const type = active.mimeType || mimeType || "audio/webm";
       const blob = new Blob(parts, { type });
+      endListening();
       releaseMic();
       setRecording(false);
       void runTranscribe(blob, type);
     };
     recorder.current = active;
-    active.start();
+    active.start(RECORD_TIMESLICE_MS);
     setRecording(true);
     micTimer.current = setTimeout(stopRecording, MAX_RECORD_MS);
+
+    // 开局「边录边听」：先预热模型（否则第一轮重转会在录音期间触发加载，
+    // 而加载全程握着识别器的锁——用户此时按停止，自己的转写会被卡住），再开监听。
+    // 整条链路失败也不影响录音本身，最多是面试官不插话。
+    const sessionId = selected;
+    void (async () => {
+      try {
+        await warmupSpeech();
+        const listenId = await startListening(sessionId);
+        if (recorder.current !== active) {      // 等预热的时候用户已经停了
+          stopListening(sessionId, listenId);
+          return;
+        }
+        listenRef.current = { sessionId, listenId };
+        setListening(true);
+      } catch {
+        listenRef.current = null;               // 监听没起来也不影响录音和转写
+      }
+    })();
   };
 
   const create = async (event: React.FormEvent) => {
@@ -670,7 +767,9 @@ export default function App() {
                         {busy
                           ? progress || "面试官正在处理本轮…"
                           : recording
-                            ? "正在录音…（最长 2 分钟，说完点「停止录音」）"
+                            ? listening
+                              ? "正在录音 · 面试官在听…（说完点「停止录音」）"
+                              : "正在录音…（最长 2 分钟，说完点「停止录音」）"
                             : transcribing
                               ? "正在识别…"
                               : micNote || "Ctrl / ⌘ + Enter 发送 · Enter 换行"}

@@ -182,6 +182,9 @@ CLI 启动会恢复最近一次对话，开始新场面试前建议先 `/clear`�
 - **不需要麦克风也能验证**：把一段 webm 按字节区间、按真实 2 秒节奏喂给 `.../listen/.../audio`
   即可复现整条链路
 
+> 要把这个功能交给别人测？用 [中途打断 —— 测试说明](documents/TESTING_INTERRUPTION.md)：
+> 从零搭环境、六组用例（含照着念的测试话术）、怎么判断「打得对不对」、以及一份已知限制清单。
+
 ### 题库
 
 题库共 **8990 道题**，九个来源（都只导入题目、不含答案——对模拟面试反而好，不泄题）：
@@ -465,6 +468,8 @@ $env:WEB_SPEECH = "off"
 
 - [Agent 运行时详解](documents/AGENT_RUNTIME.md)：保留原 README 的 s01→s17 机制说明。
 - [Web 前端说明](documents/WEB_FRONTEND.md)：文件修改清单、实时协议、语音接口与验证记录。
+- [中途打断测试说明](documents/TESTING_INTERRUPTION.md)：给测试人员的功能原理、六组用例、
+  评判标准和已知限制。
 - [项目进度与设计记录](documents/PROGRESS.md)：阶段里程碑和历史问题记录，状态以文件标注日期为准。
 - [面试官技能](skills/mock-interviewer/SKILL.md)：面试行为与评分流程约束。
 

@@ -143,10 +143,13 @@ class ListenSession:
             if not verdict:
                 print(f"[监听] {self.listen_id[:6]} 判断结果：继续听", flush=True)
                 continue
+            print(f"[监听] {self.listen_id[:6]} 判断结果：打断 →「{verdict}」", flush=True)
             if self.service.interrupt_with(self.session_id, text, verdict, self.anchor_id):
                 self.interrupts += 1
                 self.stopped_reason = "已打断"
                 return
+            # 打断没落库：多半是已经翻到下一题了（锚点失效），或者有轮次在跑
+            print(f"[监听] {self.listen_id[:6]} 打断被放弃（锚点失效或已有轮次）", flush=True)
 
     def _transcribe(self, payload: bytes) -> str:
         recognizer = self.recognizer

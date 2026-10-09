@@ -93,9 +93,6 @@ HTTP：
 | `GET /api/sessions/{id}/report` | 评分报告 |
 | `POST /api/sessions/{id}/transcribe` | 语音转文字：body 是原始音频字节，返回 `{text, utterance_id}`。**不写入会话**、不落盘。状态码：404 场次不存在 / 409 已结束 / 503 未启用语音 / 413 超限 / 415 类型不支持 |
 | `POST /api/speech/warmup` | 显式加载语音模型（首次可能要下载几百 MB），返回更新后的能力声明 |
-| `POST /api/sessions/{id}/listen` | 开始「边录边听」，返回 `listen_id`。要求语音模型**已加载**（否则 409——第一轮滚动重转会在录音期间触发加载，而它全程握着识别器的锁） |
-| `POST /api/sessions/{id}/listen/{listen_id}/audio` | 追加一块录音。块是 webm 流的**片段**、不是独立文件，后端只做追加（解的是「到目前为止的拼接」，实测被截断的 webm 能正常解码） |
-| `DELETE /api/sessions/{id}/listen/{listen_id}` | 结束监听 |
 
 WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 
@@ -107,11 +104,7 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 `input_mode` 取 `"text"`（默认）或 `"voice"`，只有 `answer` 用得上——它记录这条回答是否
 由语音转写而来，供评分对术语拼写放宽。传别的值会被 pydantic 拒绝，返回 `command.error`。
 业务事件包含 `type / session_id / turn_id / seq / data`；`seq` 为数据库全局递增序号，允许场次间有间隔。
-事件类型：`turn.started`、`reply.delta`、`reply.completed`、`tool.started`、`tool.completed`、`report.progress`、`report.completed`、`turn.completed`、`turn.cancelled`、`turn.failed`、`interview.interrupted`。
-
-WS 循环是**类型无关**的——它转发 events 表里 seq 大于游标的所有行，再补一份权威快照。
-所以后台线程（比如打断判断）只要 `store.save(session, "某个新事件", data)`，
-100ms 内就会推到浏览器，WS 处理器一行都不用改。
+事件类型：`turn.started`、`reply.delta`、`reply.completed`、`tool.started`、`tool.completed`、`report.progress`、`report.completed`、`turn.completed`、`turn.cancelled`、`turn.failed`。
 
 连接时发送 `session.snapshot`，包含最新序号和正在生成的部分文本。随后发送业务事件，并推送最新权威快照。
 重连以完整快照恢复，不重放已显示的文字；客户端按序号拒绝旧快照。断线不取消工作，结果继续落盘。
@@ -167,38 +160,6 @@ WS 循环是**类型无关**的——它转发 events 表里 seq 大于游标的
   `start-web.ps1` 默认设 `HF_ENDPOINT=https://hf-mirror.com`——国内直连 Hugging Face 通常卡到超时。
 - 音频转写完即丢，**不落盘**。
 - 端点没有 `request_id` 幂等：本地无副作用、结果确定，重复转写无害。
-
-## 中途打断
-
-候选人说话时，面试官每 8 秒判断一次要不要插话。**只在语音输入时生效**——打字是
-「写完才提交」，没有中间态。
-
-真流式 ASR 我们没有（faster-whisper 是批式），但把「录到现在的音频」整段重转只要一秒左右
-（实测 30 秒缓冲 1.1s、50 秒 1.84s）。所以每 8 秒重转一次就等同于边说边出字，
-**不需要任何新模型或新依赖**。判断线程跑在自己的线程上，**不占 `service.executor`**
-（那是轮次专用的单线程队列）也不碰 `service.lock` 的长段。
-
-几个必须做对的地方：
-
-- **锚点**：`answered_transcript` 是「面试官的话配**下一条**候选人消息」。如果候选人已经
-  答完、模型已经问了下一题才插话，那半截回答会被算到**新问题**上。所以开始监听时记下
-  最后一条面试官消息的 id，落库前要求它仍是最后一条、且后面没出现过候选人消息。
-  这个窗口不是毫秒级，是整个确认 + 生成的几十秒
-- **判断 prompt 不能含技能的「碎片输入」规则**。那条规则说「候选人消息以冒号/标题结尾
-  说明话没说完，回一句『请继续』」——而 8 秒的半截转录正是一个碎片。整份技能塞进去，
-  判断最可能的输出之一就是「请继续」，然后我们会切断麦克风把它当面试官的话注入。
-  只抽 `## 压力档位` 和 `## 追问工具箱` 两节
-- **闸门在代码里**：最少字数 / 最少新增 / **需句末标点** / 冷却 / 每题上限。
-  句末标点那条最关键——8 秒的中文多半停在句子中间，在那里打断正是让人以为功能坏了的原因
-- **不设 `session["error"]`**：前端只要 error 非空就渲染「重试」，一点会拿旧回答重放上一轮
-- **关停顺序**：先停监听线程再关 service，否则判断线程会撞上已关闭的 sqlite
-- 被打断的回答打 `interrupted` 标记，转录里显示「候选人（语音转写·被打断）」，
-  评分时不因「没答完」扣分。**这个标记也要写进解析 prompt**——报告生成会用 LLM
-  重新解析转录，不加指令会被抹掉（`VOICE_MARK` 当初就是这么漏过来的）
-
-前端收到 `interview.interrupted` 时：提示音（没有 TTS，候选人正说着、多半没看屏幕）→
-停上传 → `releaseMic()`（它摘掉 `onstop`，所以**不会触发转写**——后端已经把半截存成回答了）
-→ 清草稿和来源标记。音频块**必须串行上传**（fetch 不保证顺序，中间丢一块整个容器流就废了）。
 
 ## 尚未接入（TTS 与实时语音）
 

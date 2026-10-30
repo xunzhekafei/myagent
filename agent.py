@@ -2575,10 +2575,12 @@ INTERVIEW_SCORE_SCHEMA = {
 INTERVIEW_REPORT_SCHEMA = {
     "type": "object",
     "properties": {
-        "overall": {"type": "number"},
+        "overall": {"type": "number", "minimum": 0, "maximum": 10,
+                    "description": "总分，0-10 分制，等于四个维度分的平均值"},
         "dimension_scores": {
             "type": "object",
-            "properties": {dimension: {"type": "number"} for dimension in INTERVIEW_SCORE_DIMENSIONS},
+            "properties": {dimension: {"type": "number", "minimum": 0, "maximum": 10}
+                           for dimension in INTERVIEW_SCORE_DIMENSIONS},
             "required": list(INTERVIEW_SCORE_DIMENSIONS)},
         "strengths": {"type": "array", "items": {"type": "string"}},
         "weaknesses": {"type": "array", "items": {"type": "string"}},
@@ -2725,9 +2727,20 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
     ctx.phase("汇总")
     report = ctx.agent(
         f"根据下面的逐题评分，汇总一份{role}模拟面试报告：给出总分、各维度均分、"
-        f"优势、短板和改进建议（建议要可执行、按优先级排序）：\n\n"
+        f"优势、短板和改进建议（建议要可执行、按优先级排序）。"
+        "**所有分数一律用 0-10 分制**：各维度分是逐题分数的平均，"
+        "总分是四个维度分的平均值；不要用 100 分制或 5 分制：\n\n"
         + json.dumps(scored_questions, ensure_ascii=False),
         schema=INTERVIEW_REPORT_SCHEMA, label="summary")
+    # 总分由代码算，不用模型返回的那个：同一个 prompt 下模型会在 0-10、0-100、
+    # 0-5 之间乱跳（评测实测出现过 1.875 / 27.5 / 67.5），而前端直接显示这个数。
+    dimensions = report.get("dimension_scores") or {}
+    for name, value in list(dimensions.items()):
+        if isinstance(value, (int, float)):
+            dimensions[name] = max(0.0, min(10.0, float(value)))
+    values = [float(v) for v in dimensions.values() if isinstance(v, (int, float))]
+    if values:
+        report["overall"] = round(sum(values) / len(values), 2)
     return {**report, "per_question": scored_questions}
 
 

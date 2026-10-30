@@ -40,3 +40,6 @@ node_modules/
 frontend/dist/
 *.tsbuildinfo
 .pytest_cache/
+
+# 评测结果（每次重新生成）
+evals/results/

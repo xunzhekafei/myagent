@@ -1,0 +1,421 @@
+# 追问质量评测用例
+#
+# 每个用例模拟「候选人刚说完一段话」，看面试官接下来怎么接。
+# should / should_not 交给 LLM 裁判判断，不靠关键词硬匹配——
+# 同一个意思有很多种问法，写死关键词会误判。
+#
+# checks 是零成本的确定性检查，和裁判独立，用来兜住明显的行为错误。
+
+# ============ 应当追问的信号（技能里的五类 Claim） ============
+
+- id: attribution_vague
+  group: followup
+  title: 「主要是我负责的」应追问个人边界
+  role: AI 应用开发
+  pressure: 标准
+  background: 三年算法/后端经验
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我做过一个检索增强的问答系统，整个项目主要是我负责的，从方案设计到上线都参与了。
+  expect:
+    should:
+      - 追问个人贡献边界：系统里哪一部分是他亲手做的，其余部分是谁负责的
+    should_not:
+      - 再让他把项目介绍一遍
+      - 不做任何追问就直接换下一道技术题
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: metric_no_baseline
+  group: followup
+  title: 报出百分比应追问基线与口径
+  role: AI/ML Engineer
+  pressure: 标准
+  background: 做过推荐和排序模型
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我主要负责排序模型，把线上的推理延迟优化了大概 40%，效果挺明显的。
+  expect:
+    should:
+      - 追问这个 40% 的基线是多少、在什么数据上测的、口径怎么定的
+    should_not:
+      - 只问「用什么方法优化的」而不问数字本身怎么来的
+      - 直接认可这个提升、进入下一题
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: tech_name_drop
+  group: followup
+  title: 只报技术名词应追问它在项目里的作用
+  role: AI 应用开发
+  pressure: 标准
+  background: 后端转 AI 应用
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我主要做后端，之前做过一个高并发的订单系统。
+    - role: assistant
+      text: 那个系统的性能是怎么优化的？
+    - role: user
+      text: 我们用 Redis 做缓存，把热点数据放在里面，冷数据还是走数据库。
+  expect:
+    should:
+      - 追问缓存的是什么数据、为什么选 Redis 而不是本地缓存、一致性或失效怎么处理
+    should_not:
+      - 只问「QPS 是多少」而不问方案本身
+      - 接受「性能提升不错」这种没有对象的说法
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: arch_vague
+  group: followup
+  title: 「拆成微服务」应追问组件与数据流
+  role: 前端工程师
+  pressure: 标准
+  background: 做过中后台和 BFF
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我把前端系统拆成了微前端，各个模块解耦，扩展性很好。
+  expect:
+    should:
+      - 追问具体怎么拆的：组件边界怎么划、模块之间怎么通信、样式或状态冲突怎么处理
+    should_not:
+      - 只反问「微前端有什么好处」这种能背定义的题
+      - 直接进入下一题
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: result_unverified
+  group: followup
+  title: 「上线了、反馈很好」应追问谁在用、怎么衡量
+  role: AI Agent 开发
+  pressure: 标准
+  background: 做过企业内部的智能助手
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我做过一个企业内部的智能助手，主要是帮员工查内部文档和流程的。
+    - role: assistant
+      text: 这个系统上线之后，实际使用情况怎么样？
+    - role: user
+      text: 这个系统已经上线了，业务方反馈都挺好的，大家评价不错。
+  expect:
+    should:
+      - 追问现在有多少人在用、使用频率如何、效果用什么指标衡量、有没有具体数据
+    should_not:
+      - 接受「反馈挺好」作为结论
+      - 只问技术上怎么实现，不追问实际使用情况
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: self_contradiction
+  group: followup
+  title: 前后说法矛盾应当场指出
+  role: AI 应用开发
+  pressure: 标准
+  background: 做过 RAG 系统
+  messages:
+    - role: assistant
+      text: 你那个 RAG 系统里，向量库用的是什么？
+    - role: user
+      text: 用的 Milvus，索引是 HNSW。
+    - role: assistant
+      text: 好，那召回这块具体怎么做的？
+    - role: user
+      text: 我们其实没用向量库，就是在内存里暴力算相似度的。
+  expect:
+    should:
+      - 指出他前后说法矛盾（前面说用 Milvus，后面说没用向量库），并要他澄清
+    should_not:
+      - 当作没听见，继续问下一个问题
+      - 自己替他解释成「可能是不同模块」
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: no_failure_path
+  group: followup
+  title: 「一直很稳定」应追问异常与回滚
+  role: AI/ML Engineer
+  pressure: 标准
+  background: 做过在线推理服务
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我做在线推理服务，主要负责模型部署和监控。
+    - role: assistant
+      text: 上线之后的效果怎么样？
+    - role: user
+      text: 模型上线之后一直挺稳定的，没出过什么大问题。
+  expect:
+    should:
+      - 追问异常路径：流量突增、依赖故障或模型效果下降时怎么处理，有没有回滚机制
+    should_not:
+      - 接受「一直稳定」不再追问
+      - 只问模型结构或训练细节
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: strong_claim
+  group: followup
+  title: 「主导了整个架构」应划清边界
+  role: 大模型算法工程师
+  pressure: 标准
+  background: 有模型训练和部署经验
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 整个训练和推理的架构都是我主导设计的，团队其他同学主要是按我的方案执行。
+  expect:
+    should:
+      - 追问哪些具体设计决策是他定的、其他人负责什么、他有没有写过关键代码
+    should_not:
+      - 只问架构有哪些模块
+      - 直接接受「都是他主导」的说法
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: jargon_dump
+  group: followup
+  title: 堆术语应挑一个问实际作用
+  role: 大模型算法工程师
+  pressure: 标准
+  background: 做过 NLP 相关项目
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我们用了 Transformer、BERT、LoRA、知识蒸馏，还有 RAG，整体技术栈比较完整。
+  expect:
+    should:
+      - 挑其中一项追问它在项目里的输入输出、解决什么问题、为什么选它
+    should_not:
+      - 顺着术语继续问定义或让候选人解释名词
+      - 一次让他把每个技术都讲一遍（那是多个问题）
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: off_topic
+  group: followup
+  title: 答非所问应把话题拉回
+  role: 前端工程师
+  pressure: 标准
+  background: 做过性能优化
+  messages:
+    - role: assistant
+      text: 这个实时链路的延迟预算是多少，你是怎么保证的？
+    - role: user
+      text: 这个方案的成本其实控制得不错，我们用了一些开源组件，没花多少钱。
+  expect:
+    should:
+      - 指出他答的是成本、不是延迟，并把问题拉回到延迟预算上
+    should_not:
+      - 顺着成本继续追问，把原问题丢掉
+      - 直接换下一题
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+# ============ 不该追问的时候（防止机械追问） ============
+
+- id: solid_answer_advance
+  group: followup
+  title: 已经答清楚的点不该再纠缠
+  role: AI 应用开发
+  pressure: 标准
+  background: 做过 RAG 系统
+  messages:
+    - role: assistant
+      text: 你那个检索系统，召回和重排具体怎么做的？
+    - role: user
+      text: 召回用 Milvus 的 HNSW，ef 设的 64，top-k 取 20；重排用 bge-reranker。线上监控的 P99 延迟 180 毫秒，优化前用同一个监控口径看是 420 毫秒；压测和线上都跑两周的真实请求回放，两边数据对得上。我负责检索和重排这两块，索引调参是我做的。
+  expect:
+    should:
+      - 不再追问基线、指标口径或职责边界（这些他已经主动答清楚了），推进到新的点或下一题
+    should_not:
+      - 再问一遍「基线是多少」「你负责哪部分」这类已经答过的问题
+      - 把他已说过的话复述一遍再问
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: admit_unknown
+  group: followup
+  title: 候选人承认不知道时应换点，不逼问
+  role: AI/ML Engineer
+  pressure: 标准
+  background: 做过模型部署
+  messages:
+    - role: assistant
+      text: 你说的这个在线推理服务，灰度发布是怎么做的？
+    - role: user
+      text: 这块我不太清楚，当时是另一个同事负责的。
+  expect:
+    should:
+      - 不再追问灰度发布的技术细节，换一个他可能参与过的点或进入下一题
+    should_not:
+      - 连续逼问同一个他不清楚的问题
+      - 说教或让他「回去查一下」
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: skip_question
+  group: followup
+  title: 候选人说跳过应简短换题
+  role: 前端工程师
+  pressure: 标准
+  background: 三年经验
+  messages:
+    - role: assistant
+      text: 说一下浏览器的事件循环机制，以及微任务和宏任务的执行顺序。
+    - role: user
+      text: 这题我跳过吧，不太会。
+  expect:
+    should:
+      - 简短确认后换一道题，不评价、不说教、不鼓励
+    should_not:
+      - 让他再想想、给提示后再追一遍
+      - 说「没关系」之类的安慰或讲解正确答案
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+# ============ 行为约束 ============
+
+- id: one_question_only
+  group: behavior
+  title: 一次只能问一个问题
+  role: AI 应用开发
+  pressure: 标准
+  background: 做过 RAG 和 Agent
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我做过 RAG 问答系统，主要是我负责的。我们把准确率提升了 30%，用的是 Milvus 加 reranker，架构上拆成了检索服务和生成服务两块。
+  expect:
+    should:
+      - 只挑其中一个点追问，并且只问一个问句
+    should_not:
+      - 一次问两个以上问题（比如同时问「基线是什么、架构怎么拆、你负责哪块」）
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: no_praise
+  group: behavior
+  title: 面试中不给正面反馈
+  role: AI/ML Engineer
+  pressure: 标准
+  background: 有完整的建模经验
+  messages:
+    - role: assistant
+      text: 训练集正样本不到 0.5%，你会怎么处理类别不平衡？
+    - role: user
+      text: 我会先确认评估指标用 PR-AUC 而不是准确率，然后做过采样和代价敏感学习，阈值在验证集上按业务代价调，基线是不做处理的模型，线上灰度两周对比。
+  expect:
+    should:
+      - 直接进入下一个追问或下一题
+    should_not:
+      - 表扬、点评或说「回答得很好」「思路很清晰」之类的正面反馈
+  checks:
+    no_praise: true
+    one_question: true
+    forbid: ["请继续"]
+
+- id: fragment_continue
+  group: behavior
+  title: 碎片输入应等他说完
+  role: AI 应用开发
+  pressure: 标准
+  background: 做过模型评估
+  messages:
+    - role: assistant
+      text: 你刚才说的效果提升，具体是怎么量化的？
+    - role: user
+      text: 量化方法：
+  expect:
+    should:
+      - 意识到他话没说完，回一句「请继续」之类的话等他发完
+    should_not:
+      - 在这个空隙里追加新问题
+      - 自己猜他想说什么并顺着展开
+  checks:
+    one_question: true
+    no_praise: true
+
+- id: pressure_insult_free
+  group: behavior
+  title: 压力档可以尖锐，但不能人身攻击
+  role: 大模型算法工程师
+  pressure: 压力
+  background: 有论文和工程项目
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我负责这块，具体细节时间太久记不太清了，反正最后效果还行。
+  expect:
+    should:
+      - 以压力档的强度直接质疑「记不清」这个说法，要求给出能验证的信息
+    should_not:
+      - 评价人格、智力、学历、能力等与回答内容无关的个人特质
+      - 使用侮辱性或贬低性的措辞
+  checks:
+    one_question: true
+    forbid: ["请继续"]
+
+- id: mild_not_harsh
+  group: behavior
+  title: 温和档不应咄咄逼人
+  role: AI/ML Engineer
+  pressure: 温和
+  background: 刚转行，经验有限
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我做过一个推荐系统的小项目，不过很多细节记得不太清楚了。
+  expect:
+    should:
+      - 用更温和的方式换个问法，或者给一点方向性提示
+    should_not:
+      - 连续逼问同一个细节
+      - 使用压力档的话术（如「你这句话没有信息量」）
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]

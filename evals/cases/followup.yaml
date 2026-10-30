@@ -363,6 +363,90 @@
     no_praise: true
     forbid: ["请继续"]
 
+# ============ 深度阶梯：该深入 / 该换主题 ============
+
+- id: high_quality_deepen
+  group: followup
+  title: 高质量回答应继续深入同一主题
+  role: AI 应用开发
+  pressure: 标准
+  messages:
+    - role: assistant
+      text: 你说的缓存一致性，具体怎么保证的？
+    - role: user
+      text: 先更新数据库再删缓存，失败重试三次；缓存和数据库都带版本号，读的时候比对版本，不一致就回源。线上 P99 延迟 45 毫秒，缓存命中率 92%。
+  memory:
+    version: 1
+    phase: deep_dive
+    compare_points: []
+    projects:
+      - name: 订单系统
+        role_claim: 主导
+        metrics: ["P99 45ms"]
+        tech: ["Redis"]
+        dimensions_asked: ["技术"]
+        open_threads: []
+        turns: 2
+        done: false
+    focus:
+      topic: 缓存一致性
+      depth: 2
+      depth_cap: 3
+      quality: 0.8
+      weak_streak: 0
+      next_action: deeper
+  expect:
+    should:
+      - 继续追问同一个主题的更深一层（版本号冲突怎么处理、重试失败的边界、极端场景等）
+    should_not:
+      - 换到另一个主题或项目
+      - 问一个全新的问题
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: low_quality_switch
+  group: followup
+  title: 连续低质量回答应换主题
+  role: AI 应用开发
+  pressure: 标准
+  messages:
+    - role: assistant
+      text: 缓存一致性具体怎么保证的？
+    - role: user
+      text: 就是加了个缓存，具体细节记不清了，反正没问题。
+  memory:
+    version: 1
+    phase: deep_dive
+    compare_points: []
+    projects:
+      - name: 订单系统
+        role_claim: 主导
+        metrics: []
+        tech: ["Redis"]
+        dimensions_asked: ["技术"]
+        open_threads: ["缓存一致性怎么保证"]
+        turns: 2
+        done: false
+    focus:
+      topic: 缓存一致性
+      depth: 2
+      depth_cap: 3
+      quality: 0.2
+      weak_streak: 1
+      next_action: switch_topic
+  expect:
+    should:
+      - 简短收尾这个点，转向同一个项目里的另一个主题（或下一个项目）
+    should_not:
+      - 继续追问缓存一致性的细节
+      - 说教或给答案
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
 # ============ 不该追问的时候（防止机械追问） ============
 
 - id: solid_answer_advance

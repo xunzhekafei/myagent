@@ -181,3 +181,74 @@ def test_last_qa_skips_trailing_streaming_assistant():
                                          trailing_assistant=True))
     assert question == "第二问"
     assert answer == "第二答"
+
+
+# ---------- 追问深度阶梯（动作由代码决定） ----------
+
+def _focus_state(quality, depth=1, **extra):
+    state = {"projects": [project("A")], "phase": "deep_dive",
+             "focus": {"topic": "缓存一致性", "depth": depth, "quality": quality}}
+    state.update(extra)
+    return state
+
+
+def test_ladder_deeper_on_strong_answer():
+    result = _enforce(_focus_state(0.8), None, "标准")
+    assert result["focus"]["next_action"] == "deeper"
+    assert result["focus"]["weak_streak"] == 0
+
+
+def test_ladder_angle_on_mediocre_answer():
+    result = _enforce(_focus_state(0.5), None, "标准")
+    assert result["focus"]["next_action"] == "angle"
+
+
+def test_ladder_one_weak_answer_gets_another_angle():
+    result = _enforce(_focus_state(0.2), None, "标准")
+    assert result["focus"]["weak_streak"] == 1
+    assert result["focus"]["next_action"] == "angle"
+
+
+def test_ladder_switches_after_two_weak_answers():
+    previous = {**empty(), "focus": {"weak_streak": 1}}
+    result = _enforce(_focus_state(0.2), previous, "标准")
+    assert result["focus"]["weak_streak"] == 2
+    assert result["focus"]["next_action"] == "switch_topic"
+
+
+def test_ladder_switches_at_depth_cap():
+    # 标准档 cap=3；答得再好，到第 3 层也要换主题
+    result = _enforce(_focus_state(0.9, depth=3), None, "标准")
+    assert result["focus"]["next_action"] == "switch_topic"
+
+
+def test_ladder_cap_follows_pressure_level():
+    # 温和档 cap=2：第 2 层就换
+    result = _enforce(_focus_state(0.9, depth=2), None, "温和")
+    assert result["focus"]["next_action"] == "switch_topic"
+    # 压力档 cap=4：第 2 层还能继续深入
+    result = _enforce(_focus_state(0.9, depth=2), None, "压力")
+    assert result["focus"]["next_action"] == "deeper"
+
+
+def test_project_switch_wins_over_ladder():
+    projects = [project("A"), project("B", dimensions=["归属"], done=False)]
+    result = _enforce(_focus_state(0.9, projects=projects), None, "标准")
+    assert result["focus"]["next_action"] == "switch_project"
+
+
+def test_all_projects_done_moves_to_compare():
+    result = _enforce(_focus_state(0.9, projects=[project("A"), project("B")]),
+                      None, "标准")
+    assert result["focus"]["next_action"] == "compare"
+
+
+def test_render_shows_action_with_do_and_avoid():
+    state = {**empty(), "projects": [project("A")], "phase": "deep_dive",
+             "focus": {"topic": "缓存一致性", "depth": 2, "depth_cap": 3,
+                       "quality": 0.8, "weak_streak": 0, "next_action": "deeper"}}
+    text = render(state, messages(("Q", "A")))
+    assert "本轮动作" in text
+    assert "深入一层" in text
+    assert "要做：" in text and "不要做：" in text
+    assert "缓存一致性" in text

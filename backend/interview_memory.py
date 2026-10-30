@@ -52,18 +52,43 @@ SYSTEM = """你在维护一场模拟面试的结构化笔记。根据「已有�
 8. compare_points 写两个项目之间值得对比的**角色或决策差异**，
    写成一句可以直接问出来的话。没有两个项目就留空。
 9. answer_summary 用一句话总结候选人这一轮回答，不超过 60 字。
+10. focus：这一轮正在追的主题，用来决定下一步的深度。
+    - topic：主题名，例如「缓存一致性」；没有明确主题就留空
+    - depth：当前深度，1-4（1 概念/背景，2 原理/实践，3 边界/细节，4 取舍/极限）
+    - quality：本轮回答质量，0-1。有具体数据、取舍和边界 = 高；
+      方向对但空泛 = 中等；答非所问、明显错误或基本没答 = 低
+    不需要输出 next_action——系统会根据 quality、depth、阶段和压力档位决定。
 
 只返回 JSON，不要多余文字：
 {"projects": [{"name": "", "role_claim": "", "metrics": [], "tech": [],
   "dimensions_asked": [], "open_threads": [], "turns": 0, "done": false}],
- "phase": "deep_dive", "compare_points": [], "answer_summary": ""}"""
+ "phase": "deep_dive", "compare_points": [], "answer_summary": "",
+ "focus": {"topic": "", "depth": 1, "quality": 0.5}}"""
+
+DEPTH_CAP = {"温和": 2, "标准": 3, "压力": 4}
+
+# 动作由代码决定，模型只判断回答质量。文案放在这里，渲染时原样注入。
+ACTION_TEXT = {
+    "deeper": ("深入一层", "顺着概念 → 原理 → 边界 → 取舍再往下追一层",
+               "换主题、换项目、问一个全新的问题"),
+    "angle": ("同层换角度", "换个场景、换个规模或问代价，还是同一件事",
+              "换主题、换项目、原样重复"),
+    "switch_topic": ("换主题", "简短收尾这个点，转向同一项目里的另一个主题；项目问完了再换项目",
+                     "继续在这个点上追问"),
+    "switch_project": ("换项目", "转向另一个还没深挖的项目",
+                       "继续追问已完成的项目"),
+    "compare": ("跨项目对比", "对比两个项目里的角色、决策权或结果归属",
+                "继续追问单个项目的技术细节"),
+    "technical": ("进入技术问答", "从题库选题，一次一题", "继续深挖项目"),
+    "wrap_up": ("进入反问/收尾", "问他有什么想问的", "继续出题"),
+}
 
 
 # ---------------- 基础 ----------------
 
 def empty() -> dict:
     return {"version": MEMORY_VERSION, "projects": [], "phase": "intro",
-            "compare_points": [], "timeline": []}
+            "compare_points": [], "focus": {}, "timeline": []}
 
 
 def enabled() -> bool:
@@ -122,8 +147,12 @@ def _clean(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
-def _enforce(state: dict) -> dict:
-    """模型会违反自己该守的规则，这里兜底。"""
+def _enforce(state: dict, previous: dict | None = None, pressure: str = "标准") -> dict:
+    """模型会违反自己该守的规则，这里兜底。
+
+    深度阶梯的动作在这里**由代码决定**，不交给模型：模型只判断回答质量，
+    代码按 quality / depth / 阶段 / 压力档位算出下一步。
+    """
     projects = []
     for raw in state.get("projects") or []:
         if not isinstance(raw, dict):
@@ -153,8 +182,55 @@ def _enforce(state: dict) -> dict:
         phase = "deep_dive"          # 只有一个项目就问不出对比，退回深挖
 
     points = [_clean(p, 160) for p in (state.get("compare_points") or []) if _clean(p, 160)]
+
+    # ---- 追问深度阶梯：模型只给 quality，动作由代码算 ----
+    raw_focus = state.get("focus") or {}
+    topic = _clean(raw_focus.get("topic"), 40)
+    try:
+        depth = max(1, min(4, int(raw_focus.get("depth") or 1)))
+    except (TypeError, ValueError):
+        depth = 1
+    try:
+        quality = max(0.0, min(1.0, float(raw_focus.get("quality"))))
+    except (TypeError, ValueError):
+        quality = 0.5
+
+    previous_focus = (previous or {}).get("focus") or {}
+    try:
+        previous_streak = max(0, int(previous_focus.get("weak_streak") or 0))
+    except (TypeError, ValueError):
+        previous_streak = 0
+    weak_streak = min(3, previous_streak + 1) if quality < 0.40 else 0
+
+    cap = DEPTH_CAP.get(pressure, 3)
+    done_names = [p for p in projects if p["done"]]
+    pending = [p for p in projects if not p["done"]]
+    all_done = len(projects) >= 2 and not pending
+
+    if phase == "compare" or (phase == "deep_dive" and all_done):
+        action = "compare"
+    elif phase == "technical":
+        action = "technical"
+    elif phase == "reverse":
+        action = "wrap_up"
+    elif len(done_names) >= 1 and pending:
+        action = "switch_project"
+    elif weak_streak >= 2:
+        action = "switch_topic"
+    elif depth >= cap:
+        action = "switch_topic"
+    elif quality >= 0.65:
+        action = "deeper"
+    else:
+        action = "angle"
+
+    focus = {"topic": topic, "depth": depth, "depth_cap": cap,
+             "quality": round(quality, 2), "weak_streak": weak_streak,
+             "next_action": action}
+
     return {"projects": projects[:4], "phase": phase,
-            "compare_points": points[:3] if len(projects) >= 2 else []}
+            "compare_points": points[:3] if len(projects) >= 2 else [],
+            "focus": focus}
 
 
 def update(session: dict, reply_text: str = "") -> dict:
@@ -165,10 +241,14 @@ def update(session: dict, reply_text: str = "") -> dict:
     if not answer:
         return previous
 
+    pressure = session.get("pressure") or "标准"
     prompt = "\n".join([
+        f"压力档位：{pressure}",
+        "",
         "已有笔记：",
         json.dumps({k: previous.get(k) for k in
-                    ("projects", "phase", "compare_points")}, ensure_ascii=False),
+                    ("projects", "phase", "compare_points", "focus")},
+                   ensure_ascii=False),
         "",
         "最新一轮：",
         f"  面试官问：{question}",
@@ -185,7 +265,7 @@ def update(session: dict, reply_text: str = "") -> dict:
     if not isinstance(state, dict):
         return previous
 
-    cleaned = _enforce(state)
+    cleaned = _enforce(state, previous, pressure)
     timeline = list(previous.get("timeline") or [])
     summary = _clean(state.get("answer_summary"), 80) or _clean(answer, 80)
     timeline.append({"question": _clean(question, 80), "answer": summary})
@@ -194,6 +274,7 @@ def update(session: dict, reply_text: str = "") -> dict:
         "projects": cleaned["projects"],
         "phase": cleaned["phase"],
         "compare_points": cleaned["compare_points"],
+        "focus": cleaned["focus"],
         "timeline": timeline[-TIMELINE_KEEP:],
     }
 
@@ -264,7 +345,23 @@ def render(memory: dict | None, messages: list, alpha: float | None = None) -> s
                 bits.append(f"没答清：{'；'.join(project['open_threads'])}")
             lines.append("  " + " ｜ ".join(bits))
 
-    lines += ["", f"■ 下一步：{_phase_line(state)}"]
+    # 深度阶梯：把代码算出的动作写死在提示里，并同时给出「要做 / 不要做」
+    focus = state.get("focus") or {}
+    action = focus.get("next_action")
+    if action in ACTION_TEXT:
+        title, do, avoid = ACTION_TEXT[action]
+        lines += ["", f"■ 本轮动作（确定性规则，必须遵守）：{title}"]
+        if focus.get("topic"):
+            lines.append(
+                f"  当前主题：{focus['topic']}"
+                f"（第 {focus.get('depth', 1)}/{focus.get('depth_cap', 3)} 层）")
+        quality = focus.get("quality")
+        if isinstance(quality, (int, float)):
+            lines.append(f"  上一轮回答质量：{quality:.2f}")
+        lines += [f"  要做：{do}", f"  不要做：{avoid}"]
+
+    if action not in ("switch_project", "compare", "technical", "wrap_up"):
+        lines += ["", f"■ 下一步：{_phase_line(state)}"]
 
     points = state.get("compare_points") or []
     if points and state.get("phase") == "compare":

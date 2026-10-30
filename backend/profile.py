@@ -49,6 +49,12 @@ def _dimensions(session):
     return result
 
 
+def _version(session):
+    """老报告没有这个字段——按 v1 处理。"""
+    value = (session.get("report") or {}).get("scoring_version")
+    return int(value) if isinstance(value, int) else 1
+
+
 def _overall(session):
     """总分统一按维度均分重算。
 
@@ -77,7 +83,8 @@ def build_profile(sessions) -> dict:
     completed = _completed(sessions)
     if not completed:
         return {"sessions": 0, "timeline": [], "dimensions": {}, "roles": [],
-                "weakest": [], "recurring": [], "recent_weaknesses": []}
+                "weakest": [], "recurring": [], "recent_weaknesses": [],
+                "scoring_versions": []}
 
     timeline = []
     for session in completed:
@@ -88,6 +95,7 @@ def build_profile(sessions) -> dict:
             "pressure": session.get("pressure") or "标准",
             "overall": _overall(session),
             "dimensions": _dimensions(session),
+            "scoring_version": _version(session),
         })
 
     # 每个维度：均分、首场、最近一场、变化
@@ -161,6 +169,7 @@ def build_profile(sessions) -> dict:
             "worst": min(overalls),
         },
         "timeline": timeline,
+        "scoring_versions": sorted({entry["scoring_version"] for entry in timeline}),
         "dimensions": dimensions,
         "roles": roles,
         "weakest": weakest,

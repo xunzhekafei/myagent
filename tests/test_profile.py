@@ -6,12 +6,16 @@ from backend.profile import build_profile
 
 
 def session(sid, created, role="AI 应用开发", overall=6.0, dims=None,
-            weaknesses=None, status="completed", report=True):
+            weaknesses=None, status="completed", report=True,
+            scoring_version=None):
+    payload = {"overall": overall, "dimension_scores": dims or {},
+               "weaknesses": weaknesses or []}
+    if scoring_version is not None:
+        payload["scoring_version"] = scoring_version
     return {
         "id": sid, "candidate": "甲", "role": role, "created_at": created,
         "pressure": "标准", "status": status,
-        "report": ({"overall": overall, "dimension_scores": dims or {},
-                    "weaknesses": weaknesses or []} if report else None),
+        "report": payload if report else None,
     }
 
 
@@ -25,6 +29,18 @@ def test_empty_returns_zero():
     assert profile["sessions"] == 0
     assert profile["timeline"] == []
     assert profile["weakest"] == []
+    assert profile["scoring_versions"] == []
+
+
+def test_scoring_versions_are_exposed():
+    """跨评分口径的场次不能当作同一把尺子——画像要把版本暴露出来。"""
+    profile = build_profile([
+        session("a", "2026-10-01T10:00:00", dims=dims(), scoring_version=1),
+        session("b", "2026-10-02T10:00:00", dims=dims(), scoring_version=2),
+        session("c", "2026-10-03T10:00:00", dims=dims()),      # 老报告没有该字段
+    ])
+    assert profile["scoring_versions"] == [1, 2]
+    assert [t["scoring_version"] for t in profile["timeline"]] == [1, 2, 1]
 
 
 def test_ignores_unfinished_and_reportless_sessions():

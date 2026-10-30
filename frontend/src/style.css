@@ -1428,3 +1428,13 @@ meter::-webkit-meter-optimum-value {
   font-size: 12px;
   line-height: 1.7;
 }
+
+.profile-note {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fdf5ee;
+  color: #9a6244;
+  font-size: 12px;
+  line-height: 1.7;
+}

@@ -128,6 +128,13 @@ export default function ProfileView() {
       <section className="profile-section">
         <h2>总分趋势</h2>
         <TrendChart timeline={profile.timeline} />
+        {(profile.scoring_versions?.length ?? 0) > 1 && (
+          <p className="profile-note">
+            这些场次跨了不同的评分口径（v
+            {profile.scoring_versions?.join(" / v")}），分数不完全可比——
+            曲线的跳变可能来自口径调整，而不是水平变化。
+          </p>
+        )}
       </section>
 
       <section className="profile-section">

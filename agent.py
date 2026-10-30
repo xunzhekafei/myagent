@@ -2569,6 +2569,11 @@ def search_questions(query: str, category: str = "", level: str = "", role: str 
 # -------- 面试评分 workflow：解析问答 → 逐题评分 → 汇总报告 --------
 INTERVIEW_SCORE_DIMENSIONS = ("技术正确性", "深度与原理", "工程与场景思考", "表达与结构")
 
+# 评分口径版本。改动评分 prompt / 标尺 / 分制时递增——不同版本的分数不能直接比较，
+# 否则成长曲线会把「口径变严/变松」误画成「水平变了」。
+# v1：只有 0-10 的整数要求；v2：加入分档标尺（2026-10）。
+SCORING_VERSION = 2
+
 # 语音转写的回答在打分时会带上这个标注：本地 ASR 会把技术名词听错
 # （实测「风控反欺诈」→「分控反击诈」、「CatBoost 做建模」→「CADBoost 做节目」），
 # 那不算候选人说错。标注由 Web 端按 input_mode 打上，CLI 里没有。
@@ -2780,7 +2785,7 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
     values = [float(v) for v in dimensions.values() if isinstance(v, (int, float))]
     if values:
         report["overall"] = round(sum(values) / len(values), 2)
-    return {**report, "per_question": scored_questions}
+    return {**report, "per_question": scored_questions, "scoring_version": SCORING_VERSION}
 
 
 register_workflow(

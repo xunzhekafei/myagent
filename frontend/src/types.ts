@@ -78,7 +78,10 @@ export type Profile = {
     pressure: Pressure;
     overall: number;
     dimensions: Record<string, number>;
+    scoring_version?: number;
   }[];
+  /** 出现多个版本说明评分口径变过，跨版本的分数不完全可比 */
+  scoring_versions?: number[];
   dimensions: Record<string, DimensionTrend>;
   roles: {
     role: string;

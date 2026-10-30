@@ -114,11 +114,22 @@ class InterviewAgent:
         if not transcript:
             raise ValueError("没有已回答的问题，无法评分")
 
+        # 内部 label（parse:0 / score:3 / summary）不能直接给用户看
+        stages = {
+            "parse": "正在解析问答", "score": "正在逐题评分", "summary": "正在汇总",
+            "解析": "正在解析问答", "逐题评分": "正在逐题评分", "汇总": "正在汇总",
+        }
+
         class ProgressTask(agent.WorkflowTask):
             def event(self, event_type, **data):
                 if cancel.is_set():
                     raise InterruptedError("评分已取消")
-                emit("report.progress", {"stage": data.get("title") or data.get("label") or event_type})
+                if event_type == "report.question":
+                    # 逐题结果直接推给前端，报告边评边显示
+                    emit("report.question", data)
+                    return
+                label = str(data.get("title") or data.get("label") or event_type)
+                emit("report.progress", {"stage": stages.get(label.split(":")[0], label)})
 
         def call(prompt, schema, label, stats):
             if cancel.is_set():

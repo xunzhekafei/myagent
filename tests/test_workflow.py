@@ -106,6 +106,35 @@ def test_workflow_input_errors(iso):
         {"name": "review-changes", "args": {"changes": "x"}, "resume_from_run_id": "wf_dead"})
 
 
+def test_pipeline_reports_each_result_as_it_finishes(iso):
+    """报告流式输出的基础：某个 item 一跑完就回调，不用等整批。"""
+    import agent
+    journal = agent.WorkflowJournal(agent.RUNTIME_DIR / "wf_stream.journal.jsonl")
+    task = agent.WorkflowTask("wf_stream", "test")
+    ctx = agent.WorkflowContext(journal, task, agent_call=lambda *a: None)
+
+    seen = []
+    results = ctx.pipeline([1, 2, 3], lambda v, item, i: v * 10,
+                           on_done=lambda i, v: seen.append((i, v)))
+    assert results == [10, 20, 30]
+    assert sorted(seen) == [(0, 10), (1, 20), (2, 30)]
+    journal.close()
+
+
+def test_pipeline_on_done_failure_does_not_break_scoring(iso):
+    """回调只是展示层，抛错不能把评分结果带崩。"""
+    import agent
+    journal = agent.WorkflowJournal(agent.RUNTIME_DIR / "wf_stream_fail.journal.jsonl")
+    task = agent.WorkflowTask("wf_stream_fail", "test")
+    ctx = agent.WorkflowContext(journal, task, agent_call=lambda *a: None)
+
+    def boom(_index, _value):
+        raise RuntimeError("前端推送失败")
+
+    assert ctx.pipeline([1, 2], lambda v, item, i: v, on_done=boom) == [1, 2]
+    journal.close()
+
+
 def test_parallel_barrier_and_pipeline_order(iso):
     import agent
     journal = agent.WorkflowJournal(agent.RUNTIME_DIR / "wf_order.journal.jsonl")

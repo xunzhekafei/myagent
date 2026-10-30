@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { api, connectSession, transcribe } from "./api";
-import type { Action, Health, InputMode, Pressure, Session, SessionSummary } from "./types";
+import type {
+  Action,
+  Health,
+  InputMode,
+  Pressure,
+  ScoredQuestion,
+  Session,
+  SessionSummary,
+} from "./types";
+import LiveReport from "./components/LiveReport";
 import ProfileView from "./components/ProfileView";
 import ReportView from "./components/ReportView";
 
@@ -61,6 +70,10 @@ export default function App() {
   const [view, setView] = useState<"chat" | "report">("chat");
   // 顶层页面：会话工作区 / 跨场次能力画像
   const [page, setPage] = useState<"session" | "profile">("session");
+  // 报告生成中的逐题结果：评完一题推一条，先显示出来，不用等整份报告
+  const [liveQuestions, setLiveQuestions] = useState<
+    { index: number; total: number; item: ScoredQuestion }[]
+  >([]);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [micNote, setMicNote] = useState("");
@@ -165,8 +178,23 @@ export default function App() {
         if (message.type === "tool.started")
           setProgress(toolLabels[message.data.name] || "正在处理");
         if (message.type === "report.progress")
-          setProgress(`正在生成报告 · ${message.data.stage}`);
-        if (message.type === "report.completed") setView("report");
+          setProgress(message.data.stage || "正在生成报告");
+        if (message.type === "report.question") {
+          const entry = message.data as {
+            index: number;
+            total: number;
+            item: ScoredQuestion;
+          };
+          setLiveQuestions((previous) =>
+            [...previous.filter((q) => q.index !== entry.index), entry].sort(
+              (a, b) => a.index - b.index,
+            ),
+          );
+        }
+        if (message.type === "report.completed") {
+          setView("report");
+          setLiveQuestions([]);
+        }
       };
       ws.onclose = (event) => {
         if (disposed) return;
@@ -196,6 +224,10 @@ export default function App() {
       setTranscribing(false);
     };
   }, [selected, refresh, releaseMic]);
+  useEffect(() => {
+    // 切场次时清掉上一场的逐题预览，避免串到新场次
+    setLiveQuestions([]);
+  }, [selected]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages.at(-1)?.text, view]);
@@ -561,7 +593,9 @@ export default function App() {
                   )}
               </div>
             </div>
-            {view === "report" && session.report ? (
+            {session.status === "scoring" && liveQuestions.length > 0 ? (
+              <LiveReport questions={liveQuestions} progress={progress} />
+            ) : view === "report" && session.report ? (
               <ReportView report={session.report} />
             ) : (
               <div className="conversation">

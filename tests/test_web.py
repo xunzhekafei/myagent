@@ -313,17 +313,30 @@ def test_web_report_parses_all_chunks(iso, monkeypatch):
     monkeypatch.setattr(iso, "_split_transcript", lambda text: [f"chunk-{i}" for i in range(19)])
     parsed = []
 
+    class Task:
+        def event(self, *_args, **_kwargs):
+            pass
+
     class Context:
+        task = Task()
+
         def phase(self, title): pass
         def parallel(self, thunks):
             assert len(thunks) <= iso.WORKFLOW_MAX_PARALLEL
             return [fn() for fn in thunks]
-        def agent(self, prompt, schema, label):
+        def agent(self, prompt, schema, label, phase=""):
             if label.startswith("parse"):
                 parsed.append(label)
                 return {"qa": [{"question": label, "answer": "答"}]}
             return {"overall": 8}
-        def pipeline(self, batch, stage): return list(batch)
+        def pipeline(self, batch, stage, on_done=None):
+            out = []
+            for index, item in enumerate(batch):
+                value = stage(item, item, index)
+                if on_done is not None:
+                    on_done(index, value)
+                out.append(value)
+            return out
 
     report = iso._interview_report(Context(), {"transcript": "完整记录", "include_all": True})
     assert len(parsed) == 19

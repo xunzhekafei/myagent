@@ -42,6 +42,14 @@ export type Session = SessionSummary & {
 };
 export type Action = "start" | "answer" | "finish" | "cancel" | "retry";
 
+/** 报告生成过程中逐题推来的结果；四个维度名也是这个对象的键。 */
+export type ScoredQuestion = {
+  question: string;
+  evidence: string;
+  suggestion: string;
+  [key: string]: string | number;
+};
+
 export type DimensionTrend = {
   average: number;
   first: number;

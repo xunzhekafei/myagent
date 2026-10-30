@@ -105,7 +105,11 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 `input_mode` 取 `"text"`（默认）或 `"voice"`，只有 `answer` 用得上——它记录这条回答是否
 由语音转写而来，供评分对术语拼写放宽。传别的值会被 pydantic 拒绝，返回 `command.error`。
 业务事件包含 `type / session_id / turn_id / seq / data`；`seq` 为数据库全局递增序号，允许场次间有间隔。
-事件类型：`turn.started`、`reply.delta`、`reply.completed`、`tool.started`、`tool.completed`、`report.progress`、`report.completed`、`turn.completed`、`turn.cancelled`、`turn.failed`。
+事件类型：`turn.started`、`reply.delta`、`reply.completed`、`tool.started`、`tool.completed`、`report.progress`、`report.question`、`report.completed`、`turn.completed`、`turn.cancelled`、`turn.failed`。
+
+`report.question` 在报告生成过程中**每评完一题推一条**，data 为 `{index, total, item}`：
+`item` 是这道题的四维分数、evidence、suggestion。前端据此边收边显示，
+不必等到整份报告生成完（完整报告要跑两三分钟）。顺序不保证——按 `index` 排即可。
 
 连接时发送 `session.snapshot`，包含最新序号和正在生成的部分文本。随后发送业务事件，并推送最新权威快照。
 重连以完整快照恢复，不重放已显示的文字；客户端按序号拒绝旧快照。断线不取消工作，结果继续落盘。

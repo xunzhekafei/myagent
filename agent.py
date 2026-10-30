@@ -2122,8 +2122,12 @@ class WorkflowContext:
         self.journal.record(key, value)
         return value
 
-    def _gather(self, functions: list) -> list:
-        """并行跑完所有任务再一起返回（等齐屏障）；异常原样抛回主调用方。"""
+    def _gather(self, functions: list, on_done=None) -> list:
+        """并行跑完所有任务再一起返回（等齐屏障）；异常原样抛回主调用方。
+
+        on_done(index, value)：每完成一个就回调一次，用于边算边推给前端。
+        运行在各自的工作线程里，**回调抛错不能影响评分**——它只是展示层。
+        """
         if len(functions) > WORKFLOW_MAX_PARALLEL:
             raise WorkflowInputError(f"单次并发数超过上限 {WORKFLOW_MAX_PARALLEL}")
         results: list = [None] * len(functions)
@@ -2134,6 +2138,12 @@ class WorkflowContext:
                 results[index] = function()
             except Exception as exc:
                 errors[index] = exc
+                return
+            if on_done is not None:
+                try:
+                    on_done(index, results[index])
+                except Exception:
+                    pass
 
         threads = [threading.Thread(target=run, args=(i, fn))
                    for i, fn in enumerate(functions)]
@@ -2150,15 +2160,19 @@ class WorkflowContext:
         """等齐屏障：所有任务并行跑完，结果顺序与输入一致。"""
         return self._gather(list(thunks))
 
-    def pipeline(self, items: list, *stages) -> list:
-        """每个 item 独立走完所有 stage；item 之间并行，不等齐。"""
+    def pipeline(self, items: list, *stages, on_done=None) -> list:
+        """每个 item 独立走完所有 stage；item 之间并行，不等齐。
+
+        on_done(item_index, value)：某个 item 评完就回调，用于流式展示。
+        """
         def run_item(pair):
             index, item = pair
             value = item
             for stage in stages:
                 value = stage(value, item, index)
             return value
-        return self._gather([lambda p=pair: run_item(p) for pair in enumerate(items)])
+        return self._gather([lambda p=pair: run_item(p) for pair in enumerate(items)],
+                            on_done=on_done)
 
 
 WORKFLOWS: dict[str, tuple[dict, object]] = {}
@@ -2720,9 +2734,19 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
         return {"question": item["question"], **scored}
 
     scored_questions: list = []
+    total_questions = len(qa)
+
+    def emit_scored(local_index, value, offset=0):
+        # 每评完一题就推一次：报告要跑两三分钟，让用户先看到前面几题。
+        # 这是展示事件，失败不影响评分（_gather 已经吞掉回调异常）。
+        ctx.task.event("report.question", index=offset + local_index,
+                       total=total_questions, item=value)
+
     for start in range(0, len(qa), WORKFLOW_MAX_PARALLEL):  # 分批发，避免超过并发上限
         batch = qa[start:start + WORKFLOW_MAX_PARALLEL]
-        scored_questions.extend(ctx.pipeline(batch, score_answer))
+        scored_questions.extend(ctx.pipeline(
+            batch, score_answer,
+            on_done=lambda i, v, offset=start: emit_scored(i, v, offset)))
 
     ctx.phase("汇总")
     report = ctx.agent(

@@ -87,7 +87,8 @@ class InterviewAgent:
                        "背景": session["background"],
                        "压力档位": pressure}) +
                   f"\n本次面试的压力档位是「{pressure}」——按技能里对应档位的规则提问。"
-                  "\n当前是对话阶段。每轮只问一个问题。结束和评分由页面的结束面试按钮触发；"
+                  "\n当前是对话阶段。**每轮只输出一个问句**——发出前数一遍问号，"
+                  "超过一个就删掉后面的，留到下一轮。结束和评分由页面的结束面试按钮触发；"
                   "不调用评分、存档或文件工具。流程结束时请提示候选人点击结束面试。")
         tools = [agent.search_questions, agent.load_skill]
         text = agent.agent_loop(messages, system=system,

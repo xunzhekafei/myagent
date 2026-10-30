@@ -133,7 +133,7 @@ python evals/run_eval.py --no-judge
 | --- | --- | --- |
 | followup | 13/15 | 爱追指标不爱追故障路径；面对术语堆砌只问项目归属，不追问术语作用 |
 | behavior | 5/5 | — |
-| scoring | 4/4 | 区分度良好；同一份好回答仍有 6.6–7.9 的波动 |
+| scoring | 4/4 | 区分度良好（8.0 / 6.9 / 2.4 / 1.3）；同一份好回答 std 0.15、空洞回答 std 0.06 |
 
 跨项目两条（`two_projects_switch` / `cross_project_role`）依赖
 `backend/interview_memory.py` 的笔记注入。设 `INTERVIEW_MEMORY=off` 可以整体关掉
@@ -144,7 +144,8 @@ python evals/run_eval.py --no-judge
 同一个 prompt、同一份输入，模型的输出仍然会变：
 
 - 追问类用例会**时而通过时而失败**（`attribution_vague` 两次运行一过一挂）
-- 评分类用例的总分实测在 **6.62 / 7.12 / 7.88** 之间（同一份回答）
+- 评分加入分档标尺后，同一份好回答的三次总分是 **7.88 / 8.12 / 8.25（std 0.15）**；
+  校准前是 7.38 / 7.62 / 8.12（std 0.31）。空洞回答更稳：2.5 / 2.62 / 2.50（std 0.06）
 
 所以：
 

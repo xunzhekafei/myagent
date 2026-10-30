@@ -2620,6 +2620,71 @@ INTERVIEW_SCORE_SCHEMA = {
     },
     "required": [*INTERVIEW_SCORE_DIMENSIONS, "evidence", "suggestion"],
 }
+# ---- 评分证据的原话校验 ----
+# 报告里的 evidence 必须是候选人回答的逐字原文。模型经常改写、概括，或者把
+# 面试官的问题当成候选人的话——「有依据的反馈」就变成了摆设。
+# 非法证据先带修正提示重试；重试耗尽就标记未通过，但保留分数，不让整份报告失败。
+EVIDENCE_MAX_RETRIES = 2
+_EVIDENCE_QUOTE_PATTERNS = (
+    re.compile(r"「(.+?)」"),
+    re.compile(r"『(.+?)』"),
+    re.compile(r"“(.+?)”"),
+    re.compile(r'"(.+?)"'),
+)
+_EVIDENCE_PREFIXES = (
+    "候选人说：", "候选人回答：", "候选人表示：", "候选人提到：",
+    "他回答：", "他说：", "原话：", "证据：", "回答：",
+)
+
+
+def _normalize_evidence(text: str) -> str:
+    return re.sub(r"\s+", "", text or "")
+
+
+def _extract_evidence_quote(evidence: str) -> str:
+    """有引号取引号内最长的内容；没有就去掉「候选人说：」这类前缀。"""
+    text = (evidence or "").strip()
+    quotes = [match.group(1) for pattern in _EVIDENCE_QUOTE_PATTERNS
+              for match in pattern.finditer(text)]
+    if quotes:
+        return max(quotes, key=len).strip()
+    for prefix in _EVIDENCE_PREFIXES:
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+            break
+    return text.strip("。；;，, ")
+
+
+def validate_evidence(evidence: str, answer: str) -> tuple[bool, str, str]:
+    """返回 (是否通过, 取出的原话, 失败原因)。
+
+    通过时第二个值是纯原话——调用方应替换模型写的 evidence，
+    这样报告里不会残留「候选人说：」之类的框架词。
+    """
+    quote = _extract_evidence_quote(evidence)
+    if not quote:
+        return False, "", "证据为空"
+    normalized = _normalize_evidence(quote)
+    if len(normalized) < 2:
+        return False, quote, "证据太短"
+    if normalized not in _normalize_evidence(answer):
+        return False, quote, "不是候选人回答的逐字原文"
+    return True, quote, ""
+
+
+def validate_evidence_any(evidence: str, answers: list) -> tuple[bool, str, str]:
+    """多轮场景：原话可以来自任意一轮候选人回答。"""
+    quote = _extract_evidence_quote(evidence)
+    if not quote:
+        return False, "", "证据为空"
+    normalized = _normalize_evidence(quote)
+    if len(normalized) < 2:
+        return False, quote, "证据太短"
+    if any(normalized in _normalize_evidence(answer) for answer in answers):
+        return True, quote, ""
+    return False, quote, "不是任何一轮候选人回答的逐字原文"
+
+
 INTERVIEW_REPORT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -2756,7 +2821,7 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
             "如果对话被压缩过，改用 transcript_file 指向 .transcripts/ 里最新的存档重试")
 
     def score_answer(_value, item, index):
-        scored = ctx.agent(
+        prompt = (
             f"你是{role}方向的资深面试官，给下面这道题的候选人回答打分"
             f"（每个维度 0-10 的整数）：\n\n问题：{item['question']}\n\n"
             f"候选人回答：{item['answer']}\n\n"
@@ -2773,8 +2838,32 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
             f"注意：带「{VOICE_MARK}」标注的回答是语音识别转出来的文字，"
             "其中的技术名词拼写、同音字多半是识别错误而不是候选人说错——"
             "**这类拼写问题不要计入「技术正确性」**；但概念、原理、方案上的错误照常扣分。"
-            "evidence 字段必须引用候选人原话；suggestion 给具体改进建议。",
-            schema=INTERVIEW_SCORE_SCHEMA, label=f"score:{index}", phase="逐题评分")
+            "evidence 字段必须是候选人回答里的**逐字原文**：只摘录，不改写、"
+            "不概括、不加「候选人说」之类的前缀；不要跨轮拼接；引用面试官的问题不算。"
+            "suggestion 给具体改进建议。"
+        )
+        correction = ""
+        scored = None
+        for attempt in range(EVIDENCE_MAX_RETRIES + 1):
+            # 首次沿用 score:N（日志和测试都按这个找），重试才加后缀。
+            # journal 的缓存键包含 prompt，所以同标签不同 prompt 不会串。
+            label = f"score:{index}" if attempt == 0 else f"score:{index}:retry{attempt}"
+            scored = ctx.agent(
+                prompt + correction, schema=INTERVIEW_SCORE_SCHEMA,
+                label=label, phase="逐题评分")
+            passed, quote, reason = validate_evidence(
+                scored.get("evidence", ""), item["answer"])
+            if passed:
+                scored["evidence"] = quote       # 只留纯原话，去掉框架词
+                scored["evidence_verified"] = True
+                break
+            correction = (
+                f"\n\n上一次输出的 evidence 是：「{scored.get('evidence', '')}」，"
+                f"它{reason}。请重新输出：evidence 只能摘录候选人回答里的连续原文，"
+                "不要改写、不要概括、不要加前缀。")
+        else:
+            # 重试耗尽：保留分数，但明确标记证据没通过核验
+            scored["evidence_verified"] = False
         return {"question": item["question"], **scored}
 
     scored_questions: list = []

@@ -1438,3 +1438,10 @@ meter::-webkit-meter-optimum-value {
   font-size: 12px;
   line-height: 1.7;
 }
+
+.evidence-warning {
+  display: block;
+  margin: 6px 0 10px;
+  color: #9a6244;
+  font-size: 12px;
+}

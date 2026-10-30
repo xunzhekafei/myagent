@@ -99,31 +99,22 @@ def parse_transcript(text: str) -> list[dict]:
     return messages
 
 
-def _normalize(text: str) -> str:
-    import re
-    return re.sub(r"[\s\"'“”‘’「」『』.,，。；;：:!！?？…·\-—()（）\[\]【】*]", "", text)
-
-
 def check_evidence(report: dict, messages: list[dict]) -> list[str]:
     """证据必须是候选人的原话，不能是模型自己的概括。
 
-    不要求逐字包含某个关键词——那会把「引用了原话的后半句」误判成没引用。
-    改成找证据和候选人回答的最长公共片段：够长、且占证据的一半以上，才算引用。
+    和生产评分用同一个校验器（agent.validate_evidence_any），避免
+    「评测里通过、真实报告里没校验」两套标准。多轮场景允许引用任意一轮
+    候选人回答，但不允许跨轮拼接。
     """
-    from difflib import SequenceMatcher
+    import agent
 
-    answers = _normalize("".join(m["text"] for m in messages if m["role"] == "user"))
+    answers = [m["text"] for m in messages if m["role"] == "user"]
     failures = []
     for index, question in enumerate(report.get("per_question", []), 1):
-        evidence = _normalize(question.get("evidence") or "")
-        if len(evidence) < 12:
-            failures.append(f"第 {index} 题证据过短，不像引用原话")
-            continue
-        match = SequenceMatcher(None, evidence, answers, autojunk=False).find_longest_match()
-        if match.size < 15 or match.size / len(evidence) < 0.5:
-            failures.append(
-                f"第 {index} 题证据不是原话（最长匹配 {match.size} 字，"
-                f"占证据 {match.size / len(evidence):.0%}）")
+        passed, _, reason = agent.validate_evidence_any(
+            question.get("evidence", ""), answers)
+        if not passed:
+            failures.append(f"第 {index} 题证据未通过原话校验（{reason}）")
     return failures
 
 

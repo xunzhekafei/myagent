@@ -19,6 +19,8 @@ export type Report = {
     question: string;
     evidence: string;
     suggestion: string;
+    /** 证据是否通过了「必须是候选人逐字原话」的机器校验 */
+    evidence_verified?: boolean;
   } & Record<string, unknown>)[];
 };
 export type SessionSummary = {

@@ -56,6 +56,11 @@ export default function ReportView({ report }: { report: Report }) {
             ))}
           </div>
           <blockquote>{item.evidence}</blockquote>
+          {item.evidence_verified === false && (
+            <small className="evidence-warning">
+              这条证据未通过原话校验，可能是模型改写或概括的，仅供参考
+            </small>
+          )}
           <p>{item.suggestion}</p>
         </details>
       ))}

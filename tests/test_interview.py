@@ -346,8 +346,10 @@ def _stub_interview_runner(calls, question_count=2):
             return {"qa": [{"question": f"Q{i}", "answer": f"A{i}"}
                            for i in range(question_count)]}
         if label.startswith("score:"):
+            # evidence 必须是候选人原话，否则会触发证据校验的重试
+            answer = prompt.split("候选人回答：", 1)[-1].split("\n\n", 1)[0].strip()
             return {"技术正确性": 8, "深度与原理": 7, "工程与场景思考": 6, "表达与结构": 9,
-                    "evidence": "他说过……", "suggestion": "建议……"}
+                    "evidence": answer, "suggestion": "建议……"}
         return {"overall": 7.5,
                 "dimension_scores": {"技术正确性": 8, "深度与原理": 7,
                                      "工程与场景思考": 6, "表达与结构": 9},

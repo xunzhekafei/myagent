@@ -160,3 +160,106 @@ def test_recent_weaknesses_carry_source():
     latest = profile["recent_weaknesses"][0]
     assert latest["text"] == "第二个短板"
     assert latest["role"] == "AI/ML Engineer"
+
+
+# ---------- 弱点生命周期与复习调度 ----------
+
+from datetime import date  # noqa: E402
+
+
+def test_weak_point_lifecycle():
+    sessions = [
+        session("a", "2026-10-01T10:00:00", dims=dims(6, 6, 6, 6),
+                weaknesses=["指标口径说不清"]),
+        session("b", "2026-10-05T10:00:00", dims=dims(6.5, 6.5, 6.5, 6.5),
+                weaknesses=["指标口径说不清，基线也没给"]),
+        session("c", "2026-10-10T10:00:00", dims=dims(8, 8, 8, 8), weaknesses=[]),
+        session("d", "2026-10-15T10:00:00", dims=dims(8, 8, 8, 8), weaknesses=[]),
+    ]
+    point = build_profile(sessions, today=date(2026, 10, 20))["weak_points"][0]
+    assert point["times_seen"] == 2
+    assert point["first_seen"] == "2026-10-01"
+    assert point["last_seen"] == "2026-10-05"
+    assert point["improved"] is True          # 后两场没再出现，且以前出现过 2 次
+    assert point["archived"] is False         # 缺席 2 场 < 3
+    assert point["next_review"] == "2026-10-08"   # 第二次出现：streak 1 → 3 天
+    assert point["due"] is True               # 今天已过复习日
+
+
+def test_weak_point_merges_similar_text():
+    sessions = [
+        session("a", "2026-10-01T10:00:00", dims=dims(), weaknesses=["指标口径说不清"]),
+        session("b", "2026-10-02T10:00:00", dims=dims(),
+                weaknesses=["指标口径说不清，基线也没给"]),
+    ]
+    points = build_profile(sessions, today=date(2026, 10, 3))["weak_points"]
+    assert len(points) == 1
+    assert points[0]["times_seen"] == 2
+
+
+def test_weak_point_counts_once_per_session():
+    sessions = [
+        session("a", "2026-10-01T10:00:00", dims=dims(),
+                weaknesses=["指标口径说不清", "指标口径说不清，基线也没给"]),
+    ]
+    points = build_profile(sessions, today=date(2026, 10, 2))["weak_points"]
+    assert points[0]["times_seen"] == 1
+
+
+def test_weak_point_archived_after_three_misses():
+    sessions = [
+        session("a", "2026-10-01T10:00:00", dims=dims(), weaknesses=["空洞表述"]),
+        session("b", "2026-10-02T10:00:00", dims=dims(), weaknesses=["空洞表述"]),
+        session("c", "2026-10-03T10:00:00", dims=dims()),
+        session("d", "2026-10-04T10:00:00", dims=dims()),
+        session("e", "2026-10-05T10:00:00", dims=dims()),
+    ]
+    point = build_profile(sessions, today=date(2026, 10, 20))["weak_points"][0]
+    assert point["improved"] is True
+    assert point["archived"] is True
+    assert point["next_review"] is None
+    assert point["due"] is False
+
+
+def test_review_schedule_uses_simplified_sm2():
+    import backend.profile as profile
+    assert profile._quality(9) == 5
+    assert profile._quality(7.5) == 4
+    assert profile._quality(5.8) == 3
+    assert profile._quality(4.5) == 2
+    assert profile._quality(3) == 0
+    assert profile._schedule(0, 3) == (1, 1)
+    assert profile._schedule(1, 3) == (3, 2)
+    assert profile._schedule(2, 3) == (7, 3)
+    assert profile._schedule(3, 3) == (14, 4)
+    assert profile._schedule(2, 1) == (1, 0)     # 低分重置
+
+
+def test_empty_profile_has_no_weak_points():
+    profile = build_profile([])
+    assert profile["weak_points"] == []
+    assert profile["due_reviews"] == []
+
+
+def test_theme_merges_different_wording():
+    """跨场次措辞不同，但同属「原理深度」的弱点要合并计数。"""
+    sessions = [
+        session("a", "2026-10-01T10:00:00", dims=dims(),
+                weaknesses=["深度与原理均分最低，缺乏量化依据"]),
+        session("b", "2026-10-02T10:00:00", dims=dims(),
+                weaknesses=["部分原理表述不严谨"]),
+    ]
+    points = build_profile(sessions, today=date(2026, 10, 3))["weak_points"]
+    assert len(points) == 1
+    assert points[0]["theme"] == "原理深度"
+    assert points[0]["times_seen"] == 2
+
+
+def test_theme_mapping():
+    import backend.profile as profile
+    assert profile._theme("关键性能指标前后不一致") == "指标口径"
+    assert profile._theme("百万级事件架构设计深度不够") == "架构与故障"
+    assert profile._theme("部分原理表述不严谨") == "原理深度"
+    assert profile._theme("结构化表达偏弱") == "表达结构"
+    assert profile._theme("技术名词准确性差") == "术语准确"
+    assert profile._theme("完全对不上的表述") is None

@@ -14,11 +14,34 @@
 刻意不做的：把 weaknesses 这些自由文本做语义聚类。那需要模型，既慢又不稳定；
 先如实呈现「最近几场说过什么」，语义归并留给报告生成阶段去做标签。
 """
+import re
 from collections import Counter
+from datetime import date, timedelta
+from difflib import SequenceMatcher
 from statistics import mean
 
 DIMENSIONS = ("技术正确性", "深度与原理", "工程与场景思考", "表达与结构")
 RECENT_SESSIONS = 5
+
+# 弱点合并与复习调度
+WEAK_POINT_SIMILARITY = 0.75
+REVIEW_INTERVALS = (1, 3, 7, 14)   # 简化版 SM-2：连续答得不错就逐步拉长
+ARCHIVE_AFTER_MISSES = 3           # 连续 3 场没再出现且已改善 → 归档
+
+# 各场报告的 weaknesses 是长句、措辞各异，纯相似度合并不了。
+# 先用确定性主题归类，把「深度与原理均分最低…」和「部分原理表述不严谨」
+# 归到同一个「原理深度」下，跨场次的次数才有意义。
+WEAK_THEMES = (
+    ("指标口径", ("指标", "口径", "基线", "度量", "统计", "数字")),
+    ("架构与故障", ("架构", "设计", "故障", "降级", "回滚", "容量", "边界", "一致性")),
+    ("原理深度", ("原理", "深度", "为什么", "本质", "机制", "量化")),
+    ("表达结构", ("表达", "结构", "组织", "自我介绍", "术语堆砌", "重点")),
+    ("事实一致性", ("不一致", "矛盾", "前后", "错误", "口误", "严谨")),
+    ("个人边界", ("归属", "亲手", "负责哪", "个人贡献", "主导")),
+    ("术语准确", ("术语", "名词", "拼写", "同音")),
+    ("反问与主动性", ("反问", "主动性", "提问")),
+    ("编码能力", ("代码", "编码", "手写", "实现", "算法")),
+)
 
 
 def _number(value):
@@ -79,12 +102,148 @@ def _delta(first, latest):
     return round(latest - first, 2)
 
 
-def build_profile(sessions) -> dict:
+def _when(session):
+    raw = str(session.get("created_at") or "")[:10]
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _normalize_weak(text) -> str:
+    """去掉空白和标点，只留字词，用于聚类比较。"""
+    return re.sub(r"[\W_]+", "", str(text or "").lower())
+
+
+def _similar(a: str, b: str) -> bool:
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    return SequenceMatcher(None, a, b).ratio() >= WEAK_POINT_SIMILARITY
+
+
+def _theme(text) -> str | None:
+    """把一条弱点归到固定主题下；归不进去就返回 None，走文本相似度。"""
+    value = str(text or "")
+    for name, keywords in WEAK_THEMES:
+        if any(keyword in value for keyword in keywords):
+            return name
+    return None
+
+
+def _quality(score) -> int:
+    """把 0-10 的场次得分映射到 0-5 的复习质量。"""
+    if score is None:
+        return 2
+    if score >= 8.5:
+        return 5
+    if score >= 7.0:
+        return 4
+    if score >= 5.5:
+        return 3
+    if score >= 4.0:
+        return 2
+    return 0
+
+
+def _schedule(streak: int, quality: int) -> tuple[int, int]:
+    """简化版 SM-2：质量 >= 3 就按 1/3/7/14 天拉长；否则重置到 1 天。"""
+    if quality < 3:
+        return 1, 0
+    interval = REVIEW_INTERVALS[min(streak, len(REVIEW_INTERVALS) - 1)]
+    return interval, streak + 1
+
+
+def _weak_points(completed, today):
+    """把各场报告里的 weaknesses 聚合成有生命周期的弱点。
+
+    · 相似文本合并（0.75 阈值），first_seen / last_seen / times_seen
+    · 连续两场没再出现且以前出现过 >= 2 次 → improved
+    · improved 后再缺席到 3 场 → archived
+    · 按场次得分更新 1/3/7/14 天的复习间隔
+    """
+    clusters = []
+    for index, session in enumerate(completed):
+        seen = _when(session) or today
+        score = _overall(session)
+        texts = [str(w).strip() for w in
+                 ((session.get("report") or {}).get("weaknesses") or [])
+                 if str(w).strip()]
+        touched = set()
+        for text in texts:
+            normalized = _normalize_weak(text)
+            if not normalized:
+                continue
+            theme = _theme(text)
+            if theme:
+                cluster = next((c for c in clusters if c.get("theme") == theme), None)
+            else:
+                cluster = next((c for c in clusters
+                                if not c.get("theme") and _similar(normalized, c["_norm"])),
+                               None)
+            if cluster is None:
+                cluster = {
+                    "_norm": normalized, "theme": theme, "text": text,
+                    "first_seen": seen, "last_seen": seen, "last_index": index,
+                    "times_seen": 0, "sessions": [],
+                    "role": session.get("role") or "技术",
+                    "interval_days": 1, "review_streak": 0,
+                    "next_review": seen + timedelta(days=1),
+                }
+                clusters.append(cluster)
+            if id(cluster) in touched:       # 同一场里重复的相似表述只算一次
+                continue
+            touched.add(id(cluster))
+            cluster["text"] = text           # 用最近一次的表述做展示
+            cluster["last_seen"] = seen
+            cluster["last_index"] = index
+            cluster["role"] = session.get("role") or cluster["role"]
+            cluster["times_seen"] += 1
+            if session["id"] not in cluster["sessions"]:
+                cluster["sessions"].append(session["id"])
+            interval, streak = _schedule(cluster["review_streak"], _quality(score))
+            cluster["interval_days"] = interval
+            cluster["review_streak"] = streak
+            cluster["next_review"] = seen + timedelta(days=interval)
+
+    last_index = len(completed) - 1
+    points = []
+    for cluster in clusters:
+        missed = last_index - cluster["last_index"]
+        improved = cluster["times_seen"] >= 2 and missed >= 2
+        archived = improved and missed >= ARCHIVE_AFTER_MISSES
+        next_review = None if archived else cluster["next_review"]
+        points.append({
+            "text": cluster["text"],
+            "theme": cluster.get("theme"),
+            "role": cluster["role"],
+            "first_seen": cluster["first_seen"].isoformat(),
+            "last_seen": cluster["last_seen"].isoformat(),
+            "times_seen": cluster["times_seen"],
+            "improved": improved,
+            "archived": archived,
+            "interval_days": cluster["interval_days"],
+            "review_streak": cluster["review_streak"],
+            "next_review": next_review.isoformat() if next_review else None,
+            "due": bool(next_review and next_review <= today),
+        })
+
+    # 活跃的在前，出现次数多的在前，其次按复习日期
+    points.sort(key=lambda p: (p["archived"], -p["times_seen"],
+                               p["next_review"] or "9999-12-31"))
+    due = sorted((p for p in points if p["due"]),
+                 key=lambda p: p["next_review"] or "9999-12-31")
+    return points, due
+
+
+def build_profile(sessions, today: date | None = None) -> dict:
+    today = today or date.today()
     completed = _completed(sessions)
     if not completed:
         return {"sessions": 0, "timeline": [], "dimensions": {}, "roles": [],
                 "weakest": [], "recurring": [], "recent_weaknesses": [],
-                "scoring_versions": []}
+                "weak_points": [], "due_reviews": [], "scoring_versions": []}
 
     timeline = []
     for session in completed:
@@ -156,6 +315,8 @@ def build_profile(sessions) -> dict:
                 "created_at": session.get("created_at"),
             })
 
+    weak_points, due_reviews = _weak_points(completed, today)
+
     overalls = [entry["overall"] for entry in timeline]
     return {
         "sessions": len(completed),
@@ -175,4 +336,6 @@ def build_profile(sessions) -> dict:
         "weakest": weakest,
         "recurring": recurring,
         "recent_weaknesses": recent_weaknesses,
+        "weak_points": weak_points,
+        "due_reviews": due_reviews,
     }

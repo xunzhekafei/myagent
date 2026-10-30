@@ -62,6 +62,21 @@ export type DimensionTrend = {
   samples: number;
 };
 
+export type WeakPoint = {
+  text: string;
+  theme: string | null;
+  role: string;
+  first_seen: string;
+  last_seen: string;
+  times_seen: number;
+  improved: boolean;
+  archived: boolean;
+  interval_days: number;
+  review_streak: number;
+  next_review: string | null;
+  due: boolean;
+};
+
 export type Profile = {
   sessions: number;
   range?: { from: string; to: string };
@@ -95,6 +110,10 @@ export type Profile = {
   weakest: ({ name: string } & DimensionTrend)[];
   recurring: { text: string; count: number }[];
   recent_weaknesses: { text: string; role: string; created_at: string }[];
+  /** 跨场次聚合出的弱点，带生命周期与复习日期 */
+  weak_points: WeakPoint[];
+  /** 已到复习日的弱点 */
+  due_reviews: WeakPoint[];
 };
 
 export type SpeechCapabilities = {

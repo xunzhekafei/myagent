@@ -180,22 +180,39 @@ export default function ProfileView() {
         </div>
       </section>
 
-      {(profile.recurring.length > 0 || profile.recent_weaknesses.length > 0) && (
+      {profile.weak_points.length > 0 && (
         <section className="profile-section">
-          <h2>
-            {profile.recurring.length > 0 ? "反复出现的短板" : "最近两场的短板"}
-          </h2>
-          {profile.recurring.length > 0 && (
-            <ul className="recurring">
-              {profile.recurring.map((item) => (
-                <li key={item.text}>
-                  <b>{item.count} 次</b> {item.text}
-                </li>
-              ))}
-            </ul>
-          )}
+          <h2>弱点追踪</h2>
+          <p className="profile-sub">
+            待复习 {profile.due_reviews.length} 个 · 已改善{" "}
+            {profile.weak_points.filter((point) => point.improved).length} 个 ·
+            已归档 {profile.weak_points.filter((point) => point.archived).length} 个
+          </p>
+          <ul className="weak-points">
+            {profile.weak_points.slice(0, 8).map((point) => (
+              <li
+                key={point.text}
+                className={point.archived ? "archived" : point.due ? "due" : ""}
+              >
+                <div className="weak-line">
+                  <strong>
+                    {point.theme && <em className="weak-theme">{point.theme}</em>}
+                    {point.text}
+                  </strong>
+                  <span>{point.times_seen} 次</span>
+                </div>
+                <small>
+                  首次 {point.first_seen} · 最近 {point.last_seen}
+                  {point.next_review ? ` · 建议 ${point.next_review} 复习` : ""}
+                  {point.improved ? " · 已改善" : ""}
+                  {point.archived ? " · 已归档" : ""}
+                </small>
+              </li>
+            ))}
+          </ul>
           {profile.recent_weaknesses.length > 0 && (
-            <div className="recent-weak">
+            <details className="recent-weak">
+              <summary>最近两场的具体短板</summary>
               {profile.recent_weaknesses.map((item, index) => (
                 <p key={index}>
                   <span>
@@ -204,10 +221,40 @@ export default function ProfileView() {
                   {item.text}
                 </p>
               ))}
-            </div>
+            </details>
           )}
         </section>
       )}
+
+      {profile.weak_points.length === 0 &&
+        (profile.recurring.length > 0 || profile.recent_weaknesses.length > 0) && (
+          <section className="profile-section">
+            <h2>
+              {profile.recurring.length > 0 ? "反复出现的短板" : "最近两场的短板"}
+            </h2>
+            {profile.recurring.length > 0 && (
+              <ul className="recurring">
+                {profile.recurring.map((item) => (
+                  <li key={item.text}>
+                    <b>{item.count} 次</b> {item.text}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {profile.recent_weaknesses.length > 0 && (
+              <div className="recent-weak">
+                {profile.recent_weaknesses.map((item, index) => (
+                  <p key={index}>
+                    <span>
+                      {item.role} · {shortDate(item.created_at)}
+                    </span>
+                    {item.text}
+                  </p>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
     </div>
   );
 }

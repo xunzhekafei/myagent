@@ -1445,3 +1445,72 @@ meter::-webkit-meter-optimum-value {
   color: #9a6244;
   font-size: 12px;
 }
+
+/* ---------- 弱点追踪 ---------- */
+.profile-sub {
+  margin: -8px 0 16px;
+  color: #8a9585;
+  font-size: 12px;
+}
+.weak-points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.weak-points li {
+  padding: 12px 14px;
+  border: 1px solid #eef1e8;
+  border-radius: 9px;
+  background: #fbfcf8;
+}
+.weak-points li.due {
+  border-color: #e8c9b4;
+  background: #fdf5ee;
+}
+.weak-points li.archived {
+  opacity: 0.55;
+}
+.weak-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.weak-line strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: #2b423c;
+  line-height: 1.65;
+}
+.weak-line span {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #9aa596;
+}
+.weak-points small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #8a9585;
+}
+.recent-weak summary {
+  cursor: pointer;
+  margin: 14px 0 8px;
+  font-size: 12px;
+  color: #78857a;
+}
+
+.weak-theme {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef2e7;
+  color: #6d7f5f;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+}

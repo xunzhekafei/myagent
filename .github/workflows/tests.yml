@@ -29,10 +29,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements*.txt
+          # 锁文件固定了验证过的版本组合，避免上游更新让 CI 突然变红
+          cache-dependency-path: requirements-lock.txt
 
       - name: 安装依赖
-        run: pip install -r requirements-web.txt -r requirements-dev.txt
+        run: pip install -r requirements-lock.txt
 
       # 不需要任何密钥：pytest.ini 默认排除 slow 标记的真实 API 冒烟测试，
       # conftest.py 会给 ANTHROPIC_API_KEY 兜一个假值。约 2 秒跑完。

@@ -16,6 +16,7 @@
 import datetime
 import hashlib
 import json
+import logging
 import os
 import pathlib
 import queue
@@ -29,6 +30,8 @@ from dataclasses import asdict, dataclass, field
 
 import anthropic
 from anthropic import beta_tool
+
+logger = logging.getLogger(__name__)
 
 # 模型名：DeepSeek 兼容接口会把 claude-opus* 映射到 deepseek-v4-pro（最强），
 # claude-haiku* / claude-sonnet* 则映射到 deepseek-v4-flash（更快更便宜）
@@ -990,7 +993,8 @@ def _cron_scheduler_loop() -> None:
         try:
             poll_due_jobs(datetime.datetime.now())
         except Exception:
-            pass
+            # 守护线程不能死，但也不能悄悄死：坏了至少要能在日志里看到
+            logger.warning("cron 调度失败", exc_info=True)
 
 
 def _run_scheduled_turn_locked() -> None:
@@ -1568,12 +1572,12 @@ class TeammateRuntime:
             try:
                 BUS.send(self.name, "lead", f"{type(exc).__name__}: {exc}", "error")
             except Exception:
-                pass
+                logger.debug("teammate 错误消息投递失败", exc_info=True)
         finally:
             try:
                 _release_assignment(self.name, return_to_board=True)
             except Exception:
-                pass
+                logger.warning("teammate 清理未完成", exc_info=True)
             with team_lock:
                 active_teammates.pop(self.name, None)
                 plan_gates.pop(self.name, None)
@@ -2143,7 +2147,8 @@ class WorkflowContext:
                 try:
                     on_done(index, results[index])
                 except Exception:
-                    pass
+                    # 回调只负责展示（例如逐题推报告），不能影响评分
+                    logger.debug("workflow on_done 回调失败", exc_info=True)
 
         threads = [threading.Thread(target=run, args=(i, fn))
                    for i, fn in enumerate(functions)]
@@ -4151,7 +4156,7 @@ def _pending_console_events() -> int:
         if ctypes.windll.kernel32.GetNumberOfConsoleInputEvents(handle, ctypes.byref(count)):
             return int(count.value)
     except Exception:
-        pass
+        return 0
     return 0
 
 

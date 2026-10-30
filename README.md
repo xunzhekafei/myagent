@@ -302,6 +302,10 @@ API 文档位于 [FastAPI Docs](http://127.0.0.1:8000/docs)。
 .\.venv\Scripts\python.exe -m pytest
 ```
 
+CI 用 `requirements-lock.txt` 安装固定版本，避免上游更新让 CI 突然变红。
+锁文件由 `python tools/lock_requirements.py` 从**验证过测试的环境**生成；
+升级依赖后请重新生成并跑一遍测试。
+
 默认只运行离线测试，不需要真实密钥。真实 API 冒烟测试单独执行，会消耗模型 token：
 
 ```powershell

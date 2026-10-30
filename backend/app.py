@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .profile import build_profile
 from .service import InterviewService
 from .speech import CAPABILITIES
 
@@ -116,6 +117,11 @@ def create_app(directory=None, adapter=None, recognizer=_AUTO):
     def sessions():
         return [{key: s[key] for key in ("id", "candidate", "role", "created_at", "status")}
                 for s in app.state.service.store.list()]
+
+    @app.get("/api/profile")
+    def profile():
+        """跨场次能力画像：只聚合已生成报告的场次，不调用模型。"""
+        return build_profile(app.state.service.store.list())
 
     @app.post("/api/sessions", status_code=201)
     def create_session(body: SessionInput):

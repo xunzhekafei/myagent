@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { api, connectSession, transcribe } from "./api";
 import type { Action, Health, InputMode, Pressure, Session, SessionSummary } from "./types";
+import ProfileView from "./components/ProfileView";
 import ReportView from "./components/ReportView";
 
 // 录音上限：opus 大约 24–32 kbps，2 分钟还不到 1MB，远低于后端 5MB 的兜底上限
@@ -58,6 +59,8 @@ export default function App() {
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState(false);
   const [view, setView] = useState<"chat" | "report">("chat");
+  // 顶层页面：会话工作区 / 跨场次能力画像
+  const [page, setPage] = useState<"session" | "profile">("session");
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [micNote, setMicNote] = useState("");
@@ -321,6 +324,7 @@ export default function App() {
           href="#"
           onClick={(e) => {
             e.preventDefault();
+            setPage("session");
             setSelected(null);
           }}
         >
@@ -329,8 +333,20 @@ export default function App() {
             面试练习室<small>INTERVIEW STUDIO</small>
           </div>
         </a>
-        <button className="new-session" onClick={() => setSelected(null)}>
+        <button
+          className="new-session"
+          onClick={() => {
+            setPage("session");
+            setSelected(null);
+          }}
+        >
           <span>＋</span> 新建面试
+        </button>
+        <button
+          className={`profile-link ${page === "profile" ? "active" : ""}`}
+          onClick={() => setPage("profile")}
+        >
+          成长画像 <span>↗</span>
         </button>
         <div className="sidebar-label">
           练习记录 <span>{sessions.length}</span>
@@ -347,7 +363,10 @@ export default function App() {
               <button
                 className={`history-item ${selected === s.id ? "selected" : ""}`}
                 key={s.id}
-                onClick={() => setSelected(s.id)}
+                onClick={() => {
+                  setPage("session");
+                  setSelected(s.id);
+                }}
               >
                 <strong>{s.role}</strong>
                 <span>
@@ -367,7 +386,14 @@ export default function App() {
       <main>
         <header className="topbar">
           <span>
-            练习 / <b>{selected ? "模拟面试" : "新的开始"}</b>
+            练习 /{" "}
+            <b>
+              {page === "profile"
+                ? "成长画像"
+                : selected
+                  ? "模拟面试"
+                  : "新的开始"}
+            </b>
           </span>
           <span className="tag">
             {selected
@@ -390,7 +416,9 @@ export default function App() {
             尚未配置模型密钥。请在后端环境设置 ANTHROPIC_API_KEY 后重启服务。
           </div>
         )}
-        {!selected ? (
+        {page === "profile" ? (
+          <ProfileView />
+        ) : !selected ? (
           <div className="setup">
             <div className="intro">
               <span className="eyebrow">

@@ -1100,3 +1100,236 @@ meter::-webkit-meter-optimum-value {
     transition: none !important;
   }
 }
+
+/* ---------- 跨场次能力画像 ---------- */
+.profile-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 26px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: transparent;
+  color: #b9c9bd;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+.profile-link:hover,
+.profile-link.active {
+  background: #223f3d;
+  color: #eef4e8;
+}
+.profile-link span {
+  opacity: 0.6;
+}
+.profile {
+  padding: 34px;
+  max-width: 980px;
+}
+.profile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+.profile-head h1 {
+  margin: 8px 0 6px;
+  font-size: 30px;
+  font-weight: 600;
+  color: #1d3630;
+}
+.profile-head p {
+  margin: 0;
+  color: #78857a;
+  font-size: 14px;
+}
+.profile-empty {
+  color: #78857a;
+}
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 30px;
+}
+.profile-stats > div {
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid #e0e6d7;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.profile-stats span {
+  font-size: 12px;
+  color: #78857a;
+  letter-spacing: 0.04em;
+}
+.profile-stats strong {
+  font-size: 22px;
+  font-weight: 600;
+  color: #243b3b;
+}
+.profile-stats .up strong {
+  color: #5a7a3f;
+}
+.profile-stats .down strong {
+  color: #a2603f;
+}
+.profile-section {
+  margin-bottom: 30px;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #e0e6d7;
+  border-radius: 12px;
+}
+.profile-section h2 {
+  margin: 0 0 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2b423c;
+}
+.trend-chart {
+  width: 100%;
+  height: auto;
+}
+.trend-chart .grid {
+  stroke: #edf1e8;
+  stroke-width: 1;
+}
+.trend-chart .line {
+  fill: none;
+  stroke: #718653;
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.trend-chart .dot {
+  fill: #fff;
+  stroke: #718653;
+  stroke-width: 2.4;
+}
+.trend-chart .axis {
+  fill: #94a08f;
+  font-size: 11px;
+}
+.trend-chart .value {
+  fill: #455a4b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.profile-dims {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.profile-dims > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: #f8faf4;
+  border-radius: 9px;
+}
+.profile-dims > div.weak {
+  background: #fdf5ee;
+  box-shadow: inset 3px 0 0 #ca7349;
+}
+.profile-dims span {
+  font-size: 12px;
+  color: #66745f;
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.profile-dims span i {
+  font-style: normal;
+  color: #ca7349;
+  font-size: 11px;
+}
+.profile-dims strong {
+  font-size: 22px;
+  color: #243b3b;
+}
+.profile-dims small {
+  color: #8a9585;
+  font-size: 11px;
+}
+.profile-dims meter {
+  width: 100%;
+  height: 7px;
+}
+.profile-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.profile-roles > div {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 4px 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f0f3ea;
+}
+.profile-roles > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.profile-roles strong {
+  grid-row: span 2;
+  font-size: 14px;
+  color: #2b423c;
+}
+.profile-roles span {
+  font-size: 12px;
+  color: #78857a;
+}
+.role-bars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.role-bars small {
+  font-size: 11px;
+  color: #8a9585;
+}
+.recurring {
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.recurring li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #455a4b;
+}
+.recurring b {
+  display: inline-block;
+  min-width: 44px;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #fdf1e8;
+  color: #b0613a;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+.recent-weak p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: #576258;
+}
+.recent-weak span {
+  display: inline-block;
+  margin-right: 10px;
+  color: #9aa596;
+  font-size: 11px;
+}

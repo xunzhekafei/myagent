@@ -82,7 +82,19 @@ python evals/run_eval.py --no-judge
 `should` 要写成**可判断的具体行为**。「追问得更深入一点」这种没法判；
 「追问基线是多少、在什么数据上测的」才能判。
 
+跨轮行为（换项目、跨项目对比）可以用 `memory:` 预置一份笔记状态，
+不必真的跑一整场多轮面试：
 
+```yaml
+  memory:
+    phase: compare
+    compare_points: ["A 里说主导、B 里说参与——问他差异"]
+    projects:
+      - {name: 项目A, done: true, turns: 3, dimensions_asked: [归属, 指标]}
+      - {name: 项目B, done: true, turns: 3, dimensions_asked: [归属, 指标]}
+```
+
+`two_projects_switch` 和 `cross_project_role` 就是这么写的。
 
 评分用例在 `cases/scoring.yaml`，断言是数值区间：
 
@@ -119,9 +131,13 @@ python evals/run_eval.py --no-judge
 
 | 组 | 典型通过 | 主要问题 |
 | --- | --- | --- |
-| followup | 10–11/13 | 爱追指标不爱追故障路径；面对术语堆砌只问项目归属，不追问术语作用 |
+| followup | 13/15 | 爱追指标不爱追故障路径；面对术语堆砌只问项目归属，不追问术语作用 |
 | behavior | 5/5 | — |
 | scoring | 4/4 | 区分度良好；同一份好回答仍有 6.6–7.9 的波动 |
+
+跨项目两条（`two_projects_switch` / `cross_project_role`）依赖
+`backend/interview_memory.py` 的笔记注入。设 `INTERVIEW_MEMORY=off` 可以整体关掉
+（不注入、不更新、不额外调用模型），那两条会退化成普通追问用例——正好用来做 A/B 对照。
 
 ### 关于随机性
 

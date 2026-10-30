@@ -140,6 +140,9 @@ class InterviewService:
                 session = self.store.get(session_id)
                 if cancel.is_set() or session["active_turn"] != turn_id:
                     return
+                # 笔记是在快照上更新的（见 agent_adapter.reply），这里合并回权威会话
+                if action != "finish" and snapshot.get("memory") is not None:
+                    session["memory"] = snapshot["memory"]
                 if action == "finish":
                     session["report"] = result
                     session["status"] = "completed"

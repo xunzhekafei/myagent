@@ -244,6 +244,121 @@
     no_praise: true
     forbid: ["请继续"]
 
+# ============ 跨轮：两个项目的覆盖与对比 ============
+
+- id: two_projects_switch
+  group: followup
+  title: 第一个项目问透后应换到第二个
+  role: AI/ML Engineer
+  pressure: 标准
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我做过两个项目：一个是广告反欺诈的评分模型，主要是我主导的，用了 XGBoost 和 Flink；另一个是用户流失预测，我负责标签和特征部分。
+    - role: assistant
+      text: 先说广告反欺诈。这一整条链路里，哪部分是你亲手做的？
+    - role: user
+      text: 特征设计、样本构造、模型训练和上线监控都是我做的，实时特征流是数据工程团队写的。
+    - role: assistant
+      text: 你们的欺诈标签是怎么定的？
+    - role: user
+      text: 用观察窗口加行为定义，回流用户单独处理，正样本占比大概 0.5%。
+  # 第一个项目已经问过归属和指标两个维度，第二个项目还没开始
+  memory:
+    version: 1
+    phase: deep_dive
+    compare_points: []
+    timeline:
+      - question: 欺诈标签是怎么定的？
+        answer: 观察窗口加行为定义，回流用户单独处理
+    projects:
+      - name: 广告反欺诈
+        role_claim: 主导整个链路
+        metrics: ["正样本占比 0.5%"]
+        tech: ["XGBoost", "Flink"]
+        dimensions_asked: ["归属", "指标"]
+        open_threads: []
+        turns: 3
+        done: true
+      - name: 用户流失预测
+        role_claim: 负责标签和特征
+        metrics: []
+        tech: ["LightGBM"]
+        dimensions_asked: []
+        open_threads: []
+        turns: 0
+        done: false
+  expect:
+    should:
+      - 转向第二个项目「用户流失预测」，开始追问它的细节（标签定义、样本构造、时间窗口等）
+    should_not:
+      - 继续在广告反欺诈项目上追问新的细节
+      - 直接进入技术问答或反问环节
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
+- id: cross_project_role
+  group: followup
+  title: 两个项目都问过后应对比他的角色差异
+  role: AI/ML Engineer
+  pressure: 标准
+  messages:
+    - role: assistant
+      text: 先请你做一个自我介绍，重点讲讲你做过的项目和最擅长的方向。
+    - role: user
+      text: 我做过广告反欺诈评分模型，主导整个链路；也做过用户流失预测，负责标签和特征。
+    - role: assistant
+      text: 广告反欺诈里，你具体主导了什么？
+    - role: user
+      text: 特征、样本、模型、上线监控都是我，实时特征流是别人做的。
+    - role: assistant
+      text: 用户流失预测里，你负责哪部分？
+    - role: user
+      text: 我负责标签定义和特征工程，模型选型和上线是另一个同事。
+    - role: assistant
+      text: 那个项目的流失标签是怎么定的？
+    - role: user
+      text: 用观察窗口，回流用户延长时间窗口避免误标，正样本大概 3%。
+  # 两个项目都问过归属和指标，应该进入对比阶段
+  memory:
+    version: 1
+    phase: compare
+    compare_points:
+      - 广告反欺诈里他说「主导整个链路」，用户流失预测里他说「只负责标签和特征」——问他这两个角色的差别，以及哪个项目里他的决策权更大
+    timeline:
+      - question: 流失标签是怎么定的？
+        answer: 观察窗口，回流用户延长窗口避免误标
+    projects:
+      - name: 广告反欺诈
+        role_claim: 主导整个链路
+        metrics: ["正样本占比 0.5%"]
+        tech: ["XGBoost", "Flink"]
+        dimensions_asked: ["归属", "指标"]
+        open_threads: []
+        turns: 3
+        done: true
+      - name: 用户流失预测
+        role_claim: 负责标签和特征，模型选型与上线是别人
+        metrics: ["正样本占比 3%"]
+        tech: ["LightGBM"]
+        dimensions_asked: ["归属", "指标"]
+        open_threads: []
+        turns: 3
+        done: true
+  expect:
+    should:
+      - 做跨项目对比：问他在两个项目里的角色、决策权或贡献归属有什么不同
+    should_not:
+      - 继续追问某一个项目的技术细节
+      - 直接进入技术问答
+  checks:
+    one_question: true
+    no_praise: true
+    forbid: ["请继续"]
+
 # ============ 不该追问的时候（防止机械追问） ============
 
 - id: solid_answer_advance

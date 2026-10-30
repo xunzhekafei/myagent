@@ -34,15 +34,39 @@ from anthropic import beta_tool
 logger = logging.getLogger(__name__)
 
 # 模型名：DeepSeek 兼容接口会把 claude-opus* 映射到 deepseek-v4-pro（最强），
-# claude-haiku* / claude-sonnet* 则映射到 deepseek-v4-flash（更快更便宜）
-MODEL = "claude-opus-5"
+# claude-haiku* / claude-sonnet* 则映射到 deepseek-v4-flash（更快更便宜）。
+# 都可用环境变量覆盖：接 Ollama 等本地模型时设 MODEL=qwen2.5:7b。
+MODEL = os.environ.get("MODEL", "claude-opus-5")
 # 辅助调用（记忆召回/提取、目标判断）用快模型——它们每轮都跑，用 pro 会让每轮多等 10-30 秒
 AUX_MODEL = os.environ.get("AUX_MODEL", "claude-haiku-4-5")
 
-# 客户端会自动读取环境变量 ANTHROPIC_API_KEY（这里填 DeepSeek 的密钥即可）
+# 接口地址。默认 DeepSeek；Ollama 从 v0.13 起原生支持 Anthropic 的 /v1/messages，
+# 设 ANTHROPIC_BASE_URL=http://localhost:11434 即可，不需要额外代理。
+DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic"
+BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", DEFAULT_BASE_URL)
+
+# prompt caching：DeepSeek 支持，Ollama 不支持。接本地模型时设 PROMPT_CACHE=off，
+# 否则请求里多出来的 cache_control 可能被拒。
+PROMPT_CACHE = os.environ.get("PROMPT_CACHE", "on").strip().lower() not in (
+    "off", "0", "false", "no")
+
+# 自适应思考：Claude / Qwen3 等支持，Qwen2.5 等不支持。接不支持的模型时设 THINKING=off。
+THINKING = os.environ.get("THINKING", "on").strip().lower() not in (
+    "off", "0", "false", "no")
+
+
+def _cache_kwargs() -> dict:
+    return {"cache_control": {"type": "ephemeral"}} if PROMPT_CACHE else {}
+
+
+def _thinking_kwargs() -> dict:
+    return {"thinking": {"type": "adaptive"}} if THINKING else {}
+
+
+# 客户端会自动读取环境变量 ANTHROPIC_API_KEY（DeepSeek 填密钥即可；Ollama 填任意值）
 client = anthropic.Anthropic(
     api_key=os.environ["ANTHROPIC_API_KEY"],  # 显式传入，避免 SDK 隐式读取失败
-    base_url="https://api.deepseek.com/anthropic",  # DeepSeek 的 Anthropic 兼容接口
+    base_url=BASE_URL,
 ) if os.environ.get("ANTHROPIC_API_KEY") else None
 
 # agent 允许操作的工作目录（默认是 agent.py 所在的项目目录）
@@ -1466,7 +1490,7 @@ class TeammateRuntime:
                 system=self.system,
                 tools=TEAMMATE_TOOLS,
                 messages=self.messages,
-                cache_control={"type": "ephemeral"},
+                **_cache_kwargs(),
             )
         except Exception as exc:
             BUS.send(self.name, "lead", f"{type(exc).__name__}: {exc}", "error")
@@ -3827,11 +3851,11 @@ def agent_loop(
             with api_client.messages.stream(
                 model=MODEL,
                 max_tokens=current_max_tokens,
-                thinking={"type": "adaptive"},  # 自适应思考：让 Claude 自己决定思考深度
                 system=system,
                 tools=round_tools,
                 messages=messages,
-                cache_control={"type": "ephemeral"},
+                **_thinking_kwargs(),   # 自适应思考：让模型自己决定思考深度
+                **_cache_kwargs(),
             ) as stream:
                 for text in stream.text_stream:
                     check_cancel()

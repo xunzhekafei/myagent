@@ -348,8 +348,12 @@ npm run format
 | `WEB_SPEECH` | 设 `off` 关闭语音转文字（装了依赖但不想用时） |
 | `INTERVIEW_MEMORY` | 设 `off` 关闭面试笔记（跨项目覆盖与对比）。关闭后每轮不再额外调用模型 |
 | `INTERVIEW_DECAY` | 面试笔记的指数衰减系数，默认 `0.5`。越小越只关注最近几轮（取值 0.1–0.95） |
-| `agent.py` 中的 `MODEL` | 主模型请求名，当前为 `claude-opus-5` |
-| `agent.py` 中的 `base_url` | 默认 `https://api.deepseek.com/anthropic` |
+| `MODEL` | 主模型请求名，默认 `claude-opus-5`（DeepSeek 兼容接口会映射）。接本地模型时设成 Ollama 的模型名 |
+| `ANTHROPIC_BASE_URL` | 接口地址，默认 `https://api.deepseek.com/anthropic`；接 Ollama 时设 `http://localhost:11434` |
+| `LOCAL_MODEL` | 设 `on` 时每轮只带最近 1.2 万字符历史，避免本地模型的 KV cache 爆显存 |
+| `HISTORY_CHAR_LIMIT` | 显式指定每轮历史字符上限，优先于 `LOCAL_MODEL` |
+| `PROMPT_CACHE` | 设 `off` 关闭 prompt caching（Ollama 不支持该字段） |
+| `THINKING` | 设 `off` 关闭自适应思考（Qwen2.5 等模型不支持） |
 
 模型请求名是兼容接口配置，实际路由由服务商决定。对话、背景与评分内容会随模型请求发送给该服务商。
 密钥不会写入前端或浏览器；默认启动命令直接读取进程环境，不会自动加载 `.env`。
@@ -444,6 +448,43 @@ $env:WEB_SPEECH = "off"
 `SpeechRecognizer` 协议本身就带 `final` 标记，真流式将来可以直接接上。
 
 其他待完善方向包括更丰富的岗位题库、评分口径校准，以及跨场次进步对比。
+
+## 本地模型（可选，默认关闭）
+
+默认调用云端 DeepSeek。也可以用 [Ollama](https://ollama.com) 在本机跑模型——
+Ollama 从 v0.13 起原生支持 Anthropic 的 `/v1/messages`，所以**不需要额外代理层**。
+
+**硬件参考**：8 GB 显存建议 7B/8B 的 Q4 量化（约 4.5–5.5 GB）；14B 会溢出到内存，32B 跑不动。
+本地模型的主要瓶颈不只是显存，还有上下文——项目每轮会带对话历史，`LOCAL_MODEL=on`
+会把它收到 1.2 万字符。
+
+```powershell
+winget install Ollama.Ollama
+ollama pull qwen2.5:7b
+
+$env:ANTHROPIC_BASE_URL = "http://localhost:11434"
+$env:ANTHROPIC_API_KEY  = "ollama"      # Ollama 要求非空，值随意
+$env:MODEL              = "qwen2.5:7b"
+$env:AUX_MODEL          = "qwen2.5:7b"
+$env:PROMPT_CACHE       = "off"         # Ollama 不支持 prompt caching
+$env:THINKING           = "off"         # Qwen2.5 不支持自适应思考；Qwen3 可去掉这行
+$env:LOCAL_MODEL        = "on"          # 历史只带最近 1.2 万字符
+.\start-web.ps1
+```
+
+**显存**：Ollama 默认空闲 5 分钟后卸载模型、释放显存。建议设
+`OLLAMA_MAX_LOADED_MODELS=1`。语音识别也占 GPU（large-v3 约 2–3 GB），和 7B
+同时跑会顶满 8 GB——用本地模型时建议 `WEB_SPEECH=off`，或把 `WHISPER_DEVICE` 设成 `cpu`。
+
+**速度**：本地模型每轮还会多一次「面试笔记」提取调用；嫌慢可以设
+`INTERVIEW_MEMORY=off`。报告生成会明显慢于云端，但它是逐题流式返回的，能先看到结果。
+
+**质量预期**：7B 本地模型在追问锋利度和评分一致性上明显弱于云端。可以用评测集直接量：
+
+```powershell
+.\.venv\Scripts\python.exe evals\run_eval.py --group followup
+.\.venv\Scripts\python.exe evals\run_eval.py --group scoring
+```
 
 ## 文档与许可
 

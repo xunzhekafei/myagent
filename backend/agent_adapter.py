@@ -40,6 +40,35 @@ def answered_transcript(messages):
         for question, answer, voice in pairs)
 
 
+def history_limit() -> int:
+    """每轮带给模型的历史字符上限。
+
+    云端模型可以带 6 万字符；本地 7B 模型的 KV cache 撑不住，默认收到 1.2 万。
+    HISTORY_CHAR_LIMIT 显式设置时优先。
+    """
+    raw = os.environ.get("HISTORY_CHAR_LIMIT")
+    if raw:
+        try:
+            return max(2000, int(raw))
+        except ValueError:
+            pass
+    local = os.environ.get("LOCAL_MODEL", "off").strip().lower() in (
+        "on", "1", "true", "yes")
+    return 12000 if local else 60000
+
+
+def select_history(messages: list, limit: int | None = None) -> list:
+    """从最新往回取，直到超过上限。至少保留一条——再长也得让模型看到当前问题。"""
+    limit = history_limit() if limit is None else limit
+    selected, size = [], 0
+    for message in reversed(messages):
+        size += len(message.get("text", ""))
+        if selected and size > limit:
+            break
+        selected.append({"role": message["role"], "content": message.get("text", "")})
+    return list(reversed(selected))
+
+
 def _web_client(agent):
     """Web 路径用的模型客户端。
 
@@ -66,13 +95,7 @@ class InterviewAgent:
         agent = self._runtime()
         # Complete transcript remains in SQLite. Only the model context is bounded.
         history = [m for m in session["messages"] if m["status"] == "completed"]
-        selected, size = [], 0
-        for message in reversed(history):
-            size += len(message["text"])
-            if selected and size > 60000:
-                break
-            selected.append({"role": message["role"], "content": message["text"]})
-        messages = list(reversed(selected))
+        messages = select_history(history)
         messages.insert(0, {"role": "user", "content": "开始模拟面试，请先让我做自我介绍。"})
         # 老场次（这次改动之前建的）没有 pressure 字段，按默认档处理
         pressure = session.get("pressure") or "标准"

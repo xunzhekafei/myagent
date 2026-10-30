@@ -366,7 +366,7 @@ def test_interview_report_workflow(iso, monkeypatch):
         "name": "interview-report",
         "args": {"role": "AI/ML 工程师", "transcript": "面试官：Q0\n候选人：A0"}}))
     assert out["status"] == "completed"
-    assert out["result"]["overall"] == 7.5
+    assert out["result"]["overall"] == 7.35   # v3：按权重加权
     assert len(out["result"]["per_question"]) == 2
     assert calls[0].startswith("parse") and "score:0" in calls and calls[-1] == "summary"
 

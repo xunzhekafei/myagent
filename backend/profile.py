@@ -20,7 +20,8 @@ from datetime import date, timedelta
 from difflib import SequenceMatcher
 from statistics import mean
 
-DIMENSIONS = ("技术正确性", "深度与原理", "工程与场景思考", "表达与结构")
+from interview_spec import DIMENSION_NAMES, SCORING_VERSION, weighted_overall
+
 RECENT_SESSIONS = 5
 
 # 弱点合并与复习调度
@@ -65,7 +66,7 @@ def _completed(sessions):
 def _dimensions(session):
     scores = (session.get("report") or {}).get("dimension_scores") or {}
     result = {}
-    for name in DIMENSIONS:
+    for name in DIMENSION_NAMES:
         value = _number(scores.get(name))
         if value is not None:
             result[name] = max(0.0, min(10.0, value))
@@ -87,6 +88,9 @@ def _overall(session):
     """
     scores = _dimensions(session)
     if scores:
+        # v3 起总分是加权和；旧报告保持当时的均分口径，跨版本才能各算各的
+        if _version(session) >= SCORING_VERSION:
+            return weighted_overall(scores)
         return round(mean(scores.values()), 2)
     value = _number((session.get("report") or {}).get("overall"))
     return value if value is not None and 0 <= value <= 10 else None
@@ -259,7 +263,7 @@ def build_profile(sessions, today: date | None = None) -> dict:
 
     # 每个维度：均分、首场、最近一场、变化
     dimensions = {}
-    for name in DIMENSIONS:
+    for name in DIMENSION_NAMES:
         series = [(_dimensions(s).get(name)) for s in completed]
         series = [v for v in series if v is not None]
         if not series:
@@ -289,7 +293,7 @@ def build_profile(sessions, today: date | None = None) -> dict:
             "latest": overalls[-1] if overalls else None,
             "dimensions": {name: _average([_dimensions(s).get(name) for s in items
                                            if _dimensions(s).get(name) is not None])
-                           for name in DIMENSIONS},
+                           for name in DIMENSION_NAMES},
         })
     roles.sort(key=lambda r: r["sessions"], reverse=True)
 

@@ -31,6 +31,9 @@ from dataclasses import asdict, dataclass, field
 import anthropic
 from anthropic import beta_tool
 
+from interview_spec import (DIMENSION_NAMES, DIMENSION_WEIGHTS,
+                            SCORING_VERSION, weighted_overall)
+
 logger = logging.getLogger(__name__)
 
 # 模型名：DeepSeek 兼容接口会把 claude-opus* 映射到 deepseek-v4-pro（最强），
@@ -2591,12 +2594,8 @@ def search_questions(query: str, category: str = "", level: str = "", role: str 
 
 
 # -------- 面试评分 workflow：解析问答 → 逐题评分 → 汇总报告 --------
-INTERVIEW_SCORE_DIMENSIONS = ("技术正确性", "深度与原理", "工程与场景思考", "表达与结构")
-
-# 评分口径版本。改动评分 prompt / 标尺 / 分制时递增——不同版本的分数不能直接比较，
-# 否则成长曲线会把「口径变严/变松」误画成「水平变了」。
-# v1：只有 0-10 的整数要求；v2：加入分档标尺（2026-10）。
-SCORING_VERSION = 2
+# 维度名和评分版本来自 interview_spec.py（单一来源）
+INTERVIEW_SCORE_DIMENSIONS = DIMENSION_NAMES
 
 # 语音转写的回答在打分时会带上这个标注：本地 ASR 会把技术名词听错
 # （实测「风控反欺诈」→「分控反击诈」、「CatBoost 做建模」→「CADBoost 做节目」），
@@ -2689,7 +2688,7 @@ INTERVIEW_REPORT_SCHEMA = {
     "type": "object",
     "properties": {
         "overall": {"type": "number", "minimum": 0, "maximum": 10,
-                    "description": "总分，0-10 分制，等于四个维度分的平均值"},
+                    "description": "总分，0-10 分制，等于四个维度分按权重加权求和"},
         "dimension_scores": {
             "type": "object",
             "properties": {dimension: {"type": "number", "minimum": 0, "maximum": 10}
@@ -2886,7 +2885,8 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
         f"根据下面的逐题评分，汇总一份{role}模拟面试报告：给出总分、各维度均分、"
         f"优势、短板和改进建议（建议要可执行、按优先级排序）。"
         "**所有分数一律用 0-10 分制**：各维度分是逐题分数的平均，"
-        "总分是四个维度分的平均值；不要用 100 分制或 5 分制：\n\n"
+        "总分是四个维度分的加权和（技术正确性 30%、深度与原理 30%、"
+        "工程与场景思考 25%、表达与结构 15%）；不要用 100 分制或 5 分制：\n\n"
         + json.dumps(scored_questions, ensure_ascii=False),
         schema=INTERVIEW_REPORT_SCHEMA, label="summary")
     # 总分由代码算，不用模型返回的那个：同一个 prompt 下模型会在 0-10、0-100、
@@ -2895,9 +2895,9 @@ def _interview_report(ctx: WorkflowContext, args: dict) -> dict:
     for name, value in list(dimensions.items()):
         if isinstance(value, (int, float)):
             dimensions[name] = max(0.0, min(10.0, float(value)))
-    values = [float(v) for v in dimensions.values() if isinstance(v, (int, float))]
-    if values:
-        report["overall"] = round(sum(values) / len(values), 2)
+    weighted = weighted_overall(dimensions)
+    if weighted is not None:
+        report["overall"] = weighted
     return {**report, "per_question": scored_questions, "scoring_version": SCORING_VERSION}
 
 

@@ -263,3 +263,16 @@ def test_theme_mapping():
     assert profile._theme("结构化表达偏弱") == "表达结构"
     assert profile._theme("技术名词准确性差") == "术语准确"
     assert profile._theme("完全对不上的表述") is None
+
+
+def test_v3_reports_use_weighted_overall():
+    s = session("a", "2026-10-01T10:00:00", dims=dims(8, 7, 6, 9),
+                scoring_version=3)
+    assert build_profile([s])["overall"]["latest"] == 7.35
+
+
+def test_old_reports_keep_mean_overall():
+    """v1/v2 的旧报告仍按当时的均分口径，跨版本各算各的。"""
+    s = session("a", "2026-10-01T10:00:00", dims=dims(8, 7, 6, 9),
+                scoring_version=1)
+    assert build_profile([s])["overall"]["latest"] == 7.5

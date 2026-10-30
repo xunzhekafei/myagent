@@ -1,6 +1,12 @@
 import type { ScoredQuestion } from "../types";
 
-const DIMENSIONS = ["技术正确性", "深度与原理", "工程与场景思考", "表达与结构"];
+// 维度名不在前端硬编码：逐题事件里的数字字段就是四个维度
+const NON_DIMENSIONS = new Set([
+  "question",
+  "evidence",
+  "suggestion",
+  "evidence_verified",
+]);
 
 type Entry = { index: number; total: number; item: ScoredQuestion };
 
@@ -37,14 +43,15 @@ export default function LiveReport({
               <span>{item.question}</span>
             </div>
             <div className="live-dims">
-              {DIMENSIONS.map((name) => {
-                const value = item[name];
-                return typeof value === "number" ? (
+              {Object.entries(item)
+                .filter(([name, value]) =>
+                  !NON_DIMENSIONS.has(name) && typeof value === "number",
+                )
+                .map(([name, value]) => (
                   <span key={name}>
-                    {name} <strong>{value.toFixed(1)}</strong>
+                    {name} <strong>{Number(value).toFixed(1)}</strong>
                   </span>
-                ) : null;
-              })}
+                ))}
             </div>
             {item.evidence && (
               <p className="live-evidence">证据：{item.evidence}</p>

@@ -131,6 +131,15 @@ def create_app(directory=None, adapter=None, recognizer=_AUTO):
     def session(session_id: str):
         return get_session(session_id)
 
+    @app.delete("/api/sessions/{session_id}")
+    def delete_session(session_id: str):
+        """删除一场面试及其全部事件。正在跑的回合会先被取消。"""
+        try:
+            app.state.service.delete(session_id)
+        except KeyError:
+            raise HTTPException(404, "场次不存在")
+        return {"deleted": True}
+
     @app.get("/api/sessions/{session_id}/report")
     def report(session_id: str):
         result = get_session(session_id)["report"]

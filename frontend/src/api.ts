@@ -45,6 +45,17 @@ export async function transcribe(
   return (await response.json()).text as string;
 }
 
+/** 删除一场面试（快照 + 全部事件）。 */
+export async function deleteSession(sessionId: string): Promise<void> {
+  const response = await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      typeof error.detail === "string" ? error.detail : "删除失败，请重试",
+    );
+  }
+}
+
 export function connectSession(id: string) {
   return new WebSocket(
     `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/sessions/${id}/ws`,

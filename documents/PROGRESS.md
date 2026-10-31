@@ -43,10 +43,11 @@
 | 10-31 | 证据校验 + 追问深度阶梯 | 评分 evidence 必须是候选人逐字原话（机器校验，改写触发重试，耗尽标记未通过）；按回答质量决定深入/换角度/换主题，层数随压力档位（温和 2 / 标准 3 / 压力 4）；测试达 213 |
 | 10-31 | 弱点生命周期 + 评分口径单一来源 | 弱点按固定主题聚合，记录首次/最近/次数/改善/归档，按 1/3/7/14 天安排复习；维度与权重收拢到 `interview_spec.py`，总分改为加权和（v3，旧报告仍按均分口径）；测试达 228 |
 | 10-31 | 评分校准脚本 + 默认切 flash | 从已完成报告导出评测包，真人盲评后算 AI-人 / 人-人 Spearman ρ 与 bootstrap 区间（不调用模型）；默认模型与自动化场景统一使用 flash，pro 需显式 `MODEL=claude-opus-5`；测试达 234 |
+| 10-31 | 立即结束 | 输入区新增：保留记录直接出报告，或删除这一场（无需先答完）；删除会先取消运行中的回合，worker 收尾时发现场次已删就安全返回；测试达 238 |
 
 ## 当前状态速览
 
-- **提交**：50 个；**测试**：234 离线 + 2 冒烟；**评测用例**：26 条
+- **提交**：53 个；**测试**：238 离线 + 2 冒烟；**评测用例**：26 条
 - **评测基线**（flash）：追问 17/17、行为 5/5、评分 4/4
 - **评分区分度**（v3 加权）：优秀 8.07 / 较好 6.87 / 空洞 2.58 / 事实错误 1.32（0–10）
 - **模型**：默认 `claude-haiku-4-5`（映射 flash）；评测脚本强制 flash，`EVAL_MODEL` 才能覆盖
@@ -83,7 +84,7 @@
 - **评分**：`interview-report` workflow——记录分段并行解析 → 逐题并行评分（技术正确性/深度与原理/工程与场景思考/表达与结构）→ 汇总报告，**每个维度必须引用候选人原话作为证据**
 - **存档**：`.interviews/<候选人>/<时间戳>.json`，支持进步追踪
 - **Web 界面**：FastAPI + React。独立场次（SQLite 快照 + 递增事件日志）、流式对话、
-  取消/重试/提交去重、断线恢复快照、重启保留未完成记录。**Web 会话只开放
+  取消/重试/提交去重、断线恢复快照、重启保留未完成记录、**立即结束**（保留出报告 / 删除记录）。**Web 会话只开放
   `search_questions` 和 `load_skill` 两个工具**，碰不到文件系统（CLI 保留完整运行时能力）
 - **语音转文字**（可选装）：本地 faster-whisper，录音 → 转写 → 文字填入输入框 → 确认后提交。
   转写不改动会话、音频不落盘；未装依赖时 Web 面试一切照常，只是麦克风按钮不出现
@@ -165,7 +166,7 @@
 
 ```bash
 pip install -r requirements-web.txt -r requirements-dev.txt
-python -m pytest            # 离线测试（234 个，不需要 API key，约 3 秒）
+python -m pytest            # 离线测试（238 个，不需要 API key，约 3 秒）
 python -m pytest -m slow    # 真实 API 冒烟测试（会消耗 token）
 python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
 
@@ -201,7 +202,7 @@ frontend/             React 界面（Vite）
 evals/                面试官评测集（24 条用例 + 裁判 + 运行器）
 skills/               技能（code-review / deepseek-api / mock-interviewer）
 interview/            题库导入脚本与数据
-tests/                测试（234 离线 + 2 冒烟）
+tests/                测试（238 离线 + 2 冒烟）
 tools/                维护脚本（从验证过的环境生成依赖锁）
 documents/            文档（本文件）
 .web-data/ .sessions/ .memory/ .tasks/ .interviews/ .runtime/ .transcripts/   运行产物（已 gitignore）

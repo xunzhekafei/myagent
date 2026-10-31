@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import { api, connectSession, transcribe } from "./api";
+import { api, connectSession, deleteSession, transcribe } from "./api";
 import type {
   Action,
   Health,
@@ -10,6 +10,7 @@ import type {
   Session,
   SessionSummary,
 } from "./types";
+import EndDialog from "./components/EndDialog";
 import LiveReport from "./components/LiveReport";
 import ProfileView from "./components/ProfileView";
 import ReportView from "./components/ReportView";
@@ -74,6 +75,7 @@ export default function App() {
   const [liveQuestions, setLiveQuestions] = useState<
     { index: number; total: number; item: ScoredQuestion }[]
   >([]);
+  const [showEndDialog, setShowEndDialog] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [micNote, setMicNote] = useState("");
@@ -251,6 +253,26 @@ export default function App() {
     setError("");
     socket.current.send(JSON.stringify(command));
   };
+  const keepAndReport = () => {
+    setShowEndDialog(false);
+    send("finish");
+  };
+  const removeSession = async () => {
+    if (!selected) return;
+    setShowEndDialog(false);
+    try {
+      await deleteSession(selected);
+      setSelected(null);
+      setSession(null);
+      setView("chat");
+      setDraft("");
+      setLiveQuestions([]);
+      setMicNote("");
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "删除失败，请重试");
+    }
+  };
   const stopRecording = () => {
     const active = recorder.current;
     if (active && active.state !== "inactive") active.stop();
@@ -347,6 +369,9 @@ export default function App() {
   };
   const busy = !!session?.active_turn;
   const available = connected && !pending && !!health?.configured;
+  const answered = !!session?.messages.some(
+    (message) => message.role === "user" && message.status === "completed",
+  );
 
   return (
     <div className="app">
@@ -754,6 +779,13 @@ export default function App() {
                             {recording ? "停止录音" : transcribing ? "识别中…" : "语音输入"}
                           </button>
                         )}
+                        <button
+                          className="secondary end-now"
+                          disabled={!connected || busy || !session.messages.length}
+                          onClick={() => setShowEndDialog(true)}
+                        >
+                          立即结束
+                        </button>
                         {busy ? (
                           <button
                             className="secondary"
@@ -787,6 +819,14 @@ export default function App() {
           INTERVIEW STUDIO <span>每一场练习，都更接近理想的自己。</span>
         </footer>
       </main>
+      {showEndDialog && session && (
+        <EndDialog
+          answered={answered}
+          onKeep={keepAndReport}
+          onDelete={() => void removeSession()}
+          onCancel={() => setShowEndDialog(false)}
+        />
+      )}
     </div>
   );
 }

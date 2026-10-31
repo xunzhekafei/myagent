@@ -42,6 +42,13 @@ class SessionStore:
         with self.lock:
             return [json.loads(row[0]) for row in self.db.execute("SELECT payload FROM sessions ORDER BY rowid DESC")]
 
+    def delete(self, session_id):
+        """删除场次快照和它的全部事件。返回是否真的删掉了。"""
+        with self.lock, self.db:
+            cursor = self.db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+            self.db.execute("DELETE FROM events WHERE session_id=?", (session_id,))
+            return cursor.rowcount > 0
+
     def events(self, session_id, after):
         with self.lock:
             rows = self.db.execute("SELECT seq,payload FROM events WHERE session_id=? AND seq>? ORDER BY seq LIMIT 200",

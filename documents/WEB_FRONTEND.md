@@ -90,6 +90,7 @@ HTTP：
 | `GET /api/sessions` | 场次列表 |
 | `POST /api/sessions` | 创建场次：`candidate / role / background / pressure`。`pressure` 取 `温和` / `标准`（默认）/ `压力`，只认这三档，别的值返回 422 |
 | `GET /api/sessions/{id}` | 完整场次快照 |
+| `DELETE /api/sessions/{id}` | 删除场次（快照 + 全部事件）。正在跑的回合会先取消；404 表示场次不存在 |
 | `GET /api/sessions/{id}/report` | 评分报告 |
 | `GET /api/profile` | 跨场次能力画像：总分趋势、四维变化、岗位分组、反复短板。纯聚合已生成报告的场次，**不调用模型** |
 | `POST /api/sessions/{id}/transcribe` | 语音转文字：body 是原始音频字节，返回 `{text, utterance_id}`。**不写入会话**、不落盘。状态码：404 场次不存在 / 409 已结束 / 503 未启用语音 / 413 超限 / 415 类型不支持 |

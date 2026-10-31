@@ -356,3 +356,44 @@ def test_report_excludes_unanswered_last_question_and_partial_reply():
     assert "不会，跳过" in transcript  # Explicit skips still count as an answer.
     assert "不完整追问" not in transcript
     assert "结束前还未回答的问题" not in transcript
+
+
+# ---------- 删除场次 ----------
+
+def test_delete_session_removes_snapshot_and_events(tmp_path):
+    with TestClient(create_app(tmp_path, FakeAgent(), recognizer=None)) as client:
+        sid = client.post("/api/sessions",
+                          json={"candidate": "甲", "role": "AI"}).json()["id"]
+        service = client.app.state.service
+        service.store.save(service.store.get(sid), "test.event", {"x": 1})
+        assert service.store.events(sid, 0)
+
+        assert client.delete(f"/api/sessions/{sid}").json()["deleted"] is True
+        assert client.get(f"/api/sessions/{sid}").status_code == 404
+        assert all(item["id"] != sid for item in client.get("/api/sessions").json())
+        assert service.store.events(sid, 0) == []
+
+
+def test_delete_missing_session_returns_404(tmp_path):
+    with TestClient(create_app(tmp_path, FakeAgent(), recognizer=None)) as client:
+        assert client.delete("/api/sessions/nope").status_code == 404
+
+
+def test_delete_cancels_running_turn(tmp_path):
+    """删除正在跑的场次要先取消，worker 收尾时不能把场次写回来。"""
+    service = InterviewService(tmp_path, FakeAgent())
+    try:
+        session = service.create("甲", "AI", "")
+        session["active_turn"] = "t1"
+        service.store.save(session)
+        cancel = threading.Event()
+        service.cancels["t1"] = cancel
+
+        service.delete(session["id"])
+
+        assert cancel.is_set()
+        assert service.store.events(session["id"], 0) == []
+        with pytest.raises(KeyError):
+            service.store.get(session["id"])
+    finally:
+        service.close()

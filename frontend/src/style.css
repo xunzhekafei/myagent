@@ -1514,3 +1514,49 @@ meter::-webkit-meter-optimum-value {
   font-size: 11px;
   font-weight: 500;
 }
+
+/* ---------- 立即结束确认框 ---------- */
+.end-now {
+  white-space: nowrap;
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(23, 46, 46, 0.45);
+}
+.modal {
+  width: min(520px, 100%);
+  padding: 26px 28px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(20, 40, 38, 0.28);
+}
+.modal h3 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  color: #1d3630;
+}
+.modal p {
+  margin: 0 0 22px;
+  color: #66745f;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.modal-actions .danger {
+  color: #a34f38;
+  border-color: #e3b9a8;
+}
+.modal-actions .danger:hover:not(:disabled) {
+  background: #fdf1ea;
+}

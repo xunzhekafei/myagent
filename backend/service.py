@@ -55,6 +55,22 @@ class InterviewService:
         session.update(status="ready", active_turn=None, error=reason)
         self.store.save(session, event_type, {"message": reason}, turn_id)
 
+    def delete(self, session_id):
+        """删掉一场面试。
+
+        正在跑的回合先取消——worker 收尾时会发现场次已经不在，安全退出，
+        不会把已删除的场次又写回去。
+        """
+        with self.lock:
+            session = self.store.get(session_id)      # 不存在时抛 KeyError
+            turn_id = session.get("active_turn")
+            if turn_id:
+                cancel = self.cancels.get(turn_id)
+                if cancel is not None:
+                    cancel.set()
+                self.cancels.pop(turn_id, None)
+            self.store.delete(session_id)
+
     def submit(self, session_id, action, text="", request_id="", input_mode="text"):
         with self.lock:
             session = self.store.get(session_id)
@@ -137,7 +153,10 @@ class InterviewService:
             else:
                 result = self.adapter.reply(snapshot, emit, cancel, self.directory / session_id)
             with self.lock:
-                session = self.store.get(session_id)
+                try:
+                    session = self.store.get(session_id)
+                except KeyError:
+                    return                    # 场次已被删除，别再写回去
                 if cancel.is_set() or session["active_turn"] != turn_id:
                     return
                 # 笔记是在快照上更新的（见 agent_adapter.reply），这里合并回权威会话
@@ -159,13 +178,19 @@ class InterviewService:
                 self.store.save(session, "turn.completed", {}, turn_id)
         except InterruptedError:
             with self.lock:
-                session = self.store.get(session_id)
+                try:
+                    session = self.store.get(session_id)
+                except KeyError:
+                    return
                 if session["active_turn"] == turn_id:
                     self._interrupt(session, "本轮已取消，可重试。")
         except Exception as error:
             logging.getLogger(__name__).exception("Interview turn failed: %s", turn_id)
             with self.lock:
-                session = self.store.get(session_id)
+                try:
+                    session = self.store.get(session_id)
+                except KeyError:
+                    return
                 if session["active_turn"] == turn_id:
                     self._interrupt(session, public_error(error), "turn.failed")
         finally:

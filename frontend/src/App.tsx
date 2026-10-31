@@ -8,6 +8,7 @@ import type {
   Pressure,
   ScoredQuestion,
   Session,
+  SessionMode,
   SessionSummary,
 } from "./types";
 import EndDialog from "./components/EndDialog";
@@ -33,6 +34,27 @@ function micErrorMessage(error: unknown): string {
   if (name === "NotReadableError")
     return "麦克风被其他程序占用了（Windows 上很常见）。关掉占用的程序后重试。";
   return `打不开麦克风：${error instanceof Error ? error.message : String(error)}`;
+}
+
+/** 朗读前去掉 Markdown 记号；代码块不念，提示看屏幕。 */
+function speechText(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, "（代码部分见屏幕）")
+    .replace(/`[^`]*`/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_#>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function chineseVoice(): SpeechSynthesisVoice | null {
+  if (!("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  return (
+    voices.find((voice) => voice.lang === "zh-CN") ??
+    voices.find((voice) => voice.lang.startsWith("zh")) ??
+    null
+  );
 }
 
 const labels: Record<string, string> = {
@@ -66,6 +88,7 @@ export default function App() {
   const [role, setRole] = useState("AI / ML 工程师");
   const [background, setBackground] = useState("");
   const [pressure, setPressure] = useState<Pressure>("标准");
+  const [mode, setMode] = useState<SessionMode>("text");
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState(false);
   const [view, setView] = useState<"chat" | "report">("chat");
@@ -78,6 +101,7 @@ export default function App() {
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [micNote, setMicNote] = useState("");
   // 草稿里有没有语音转写来的内容。提交时告诉后端，好让评分对术语拼写宽容些
   // （识别错的不该算候选人说错）。草稿清空时由下面的 effect 复位。
@@ -87,6 +111,12 @@ export default function App() {
   const micStream = useRef<MediaStream | null>(null);
   const micTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const micAbort = useRef<AbortController | null>(null);
+  // 纯语音模式：当前场次是否是语音、是否正在朗读、朗读结束后是否自动听下一轮
+  const sessionModeRef = useRef<"text" | "voice">("text");
+  const speakingRef = useRef(false);
+  const speakRef = useRef<(text: string) => void>(() => {});
+  const voiceContinue = useRef<() => void>(() => {});
+  const startRecordingRef = useRef<() => void>(() => {});
   const pendingCommand = useRef<{
     action: Action;
     text: string;
@@ -193,6 +223,9 @@ export default function App() {
             ),
           );
         }
+        if (message.type === "reply.completed" && sessionModeRef.current === "voice") {
+          speakRef.current(message.data.text);
+        }
         if (message.type === "report.completed") {
           setView("report");
           setLiveQuestions([]);
@@ -224,6 +257,9 @@ export default function App() {
       releaseMic();
       setRecording(false);
       setTranscribing(false);
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      speakingRef.current = false;
+      setSpeaking(false);
     };
   }, [selected, refresh, releaseMic]);
   useEffect(() => {
@@ -237,12 +273,46 @@ export default function App() {
   useEffect(() => {
     if (!draft) setVoiceOrigin(false);
   }, [draft]);
+  useEffect(() => {
+    sessionModeRef.current = session?.mode === "voice" ? "voice" : "text";
+  }, [session?.mode]);
 
-  const send = (action: Action) => {
-    if (socket.current?.readyState !== WebSocket.OPEN || pending) return;
-    const text = action === "answer" ? draft : "";
+  const speak = useCallback((text: string) => {
+    if (!("speechSynthesis" in window)) return;
+    const clean = speechText(text);
+    if (!clean) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = "zh-CN";
+    const voice = chineseVoice();
+    if (voice) utterance.voice = voice;
+    utterance.rate = 1.0;
+    utterance.onstart = () => {
+      speakingRef.current = true;
+      setSpeaking(true);
+    };
+    utterance.onend = () => {
+      speakingRef.current = false;
+      setSpeaking(false);
+      voiceContinue.current();
+    };
+    utterance.onerror = () => {
+      speakingRef.current = false;
+      setSpeaking(false);
+    };
+    window.speechSynthesis.speak(utterance);
+  }, []);
+  useEffect(() => {
+    speakRef.current = speak;
+  }, [speak]);
+
+  const send = (action: Action, textOverride?: string) => {
+    if (socket.current?.readyState !== WebSocket.OPEN || pending) return false;
+    const text = action === "answer" ? (textOverride ?? draft) : "";
     const inputMode: InputMode =
-      action === "answer" && voiceOrigin ? "voice" : "text";
+      action === "answer" && (voiceOrigin || textOverride !== undefined)
+        ? "voice"
+        : "text";
     const previous = pendingCommand.current;
     const command =
       previous?.action === action && previous.text === text
@@ -252,6 +322,7 @@ export default function App() {
     setPending(true);
     setError("");
     socket.current.send(JSON.stringify(command));
+    return true;
   };
   const keepAndReport = () => {
     setShowEndDialog(false);
@@ -297,6 +368,15 @@ export default function App() {
       }
       setMicNote("");
       setVoiceOrigin(true); // 这条草稿含语音转写内容，提交时带上标记
+      if (sessionModeRef.current === "voice") {
+        // 纯语音会话：转写完直接提交，不经过输入框确认
+        const answer = text.trim();
+        setDraft(answer);
+        if (!send("answer", answer)) {
+          setMicNote("连接还没就绪，请稍后再试");
+        }
+        return;
+      }
       setDraft((current) => {
         const merged = current.trim()
           ? `${current.trimEnd()}\n${text.trim()}`
@@ -313,6 +393,10 @@ export default function App() {
 
   const startRecording = async () => {
     if (!selected || recording || transcribing) return;
+    // 纯语音模式下，点麦克风也等于打断正在朗读的面试官
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    speakingRef.current = false;
+    setSpeaking(false);
     setError("");
     setMicNote("");
     // 非安全上下文下 mediaDevices 直接不存在（用局域网 IP 访问时就是这样）
@@ -348,6 +432,22 @@ export default function App() {
     micTimer.current = setTimeout(stopRecording, MAX_RECORD_MS);
   };
 
+  useEffect(() => {
+    startRecordingRef.current = () => {
+      void startRecording();
+    };
+  }, [startRecording]);
+
+  useEffect(() => {
+    // 朗读结束后自动开始听下一轮；失败或被打断时用户可以自己点麦克风
+    voiceContinue.current = () => {
+      if (sessionModeRef.current !== "voice") return;
+      if (session?.active_turn || recording || transcribing) return;
+      if (socket.current?.readyState !== WebSocket.OPEN) return;
+      startRecordingRef.current();
+    };
+  }, [session?.active_turn, recording, transcribing]);
+
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     setCreating(true);
@@ -358,6 +458,7 @@ export default function App() {
         role,
         background,
         pressure,
+        mode,
       });
       await refresh();
       setSelected(s.id);
@@ -559,17 +660,44 @@ export default function App() {
                   rows={5}
                 />
               </label>
-              <div className="mode">
-                <span className="mode-icon">Aa</span>
-                <div>
-                  <strong>文字面试</strong>
-                  <small>按自己的节奏组织回答，支持多行输入</small>
-                </div>
-                <span className="mode-check">✓</span>
+              <div className="mode-select">
+                <button
+                  type="button"
+                  className={`mode ${mode === "text" ? "active" : ""}`}
+                  onClick={() => setMode("text")}
+                >
+                  <span className="mode-icon">Aa</span>
+                  <div>
+                    <strong>文字面试</strong>
+                    <small>按自己的节奏组织回答，支持多行输入</small>
+                  </div>
+                  {mode === "text" && <span className="mode-check">✓</span>}
+                </button>
+                <button
+                  type="button"
+                  className={`mode ${mode === "voice" ? "active" : ""}`}
+                  onClick={() => setMode("voice")}
+                  disabled={!health?.speech.asr}
+                >
+                  <span className="mode-icon">◉</span>
+                  <div>
+                    <strong>纯语音</strong>
+                    <small>
+                      {health?.speech.asr
+                        ? "面试官朗读问题，你直接说话回答"
+                        : "本机未启用语音识别"}
+                    </small>
+                  </div>
+                  {mode === "voice" && <span className="mode-check">✓</span>}
+                </button>
               </div>
               <button
                 className="primary start-button"
-                disabled={creating || !health?.configured}
+                disabled={
+                  creating ||
+                  !health?.configured ||
+                  (mode === "voice" && !health?.speech.asr)
+                }
               >
                 {creating ? "正在创建…" : "进入面试室"} <span>↗</span>
               </button>
@@ -587,6 +715,9 @@ export default function App() {
                 <p>
                   {session.candidate} <span>·</span> {date(session.created_at)}{" "}
                   <span>·</span> {labels[session.status]}
+                  {session.mode === "voice" && (
+                    <span className="voice-tag">纯语音</span>
+                  )}
                 </p>
               </div>
               <div className="session-actions">
@@ -724,6 +855,55 @@ export default function App() {
                     >
                       查看我的报告 ↗
                     </button>
+                  </div>
+                ) : session.mode === "voice" ? (
+                  <div className="voice-panel">
+                    <button
+                      className={`voice-mic ${recording ? "recording" : speaking ? "speaking" : ""}`}
+                      disabled={
+                        transcribing ||
+                        busy ||
+                        (!recording && (!connected || !available))
+                      }
+                      onClick={() => {
+                        if (recording) stopRecording();
+                        else void startRecording();
+                      }}
+                    >
+                      <span className="voice-mic-icon">
+                        {recording ? "◼" : "◉"}
+                      </span>
+                      <strong>
+                        {recording
+                          ? "停止并提交"
+                          : speaking
+                            ? "打断并说话"
+                            : "点击说话"}
+                      </strong>
+                      <small>纯语音面试</small>
+                    </button>
+                    <p className="voice-status">
+                      {!connected
+                        ? "正在连接…"
+                        : busy
+                          ? "面试官正在组织回答…"
+                          : speaking
+                            ? "面试官正在说，点麦克风可以打断"
+                            : transcribing
+                              ? "正在识别…"
+                              : recording
+                                ? "正在听…说完点一下停止"
+                                : "点一下开始说话，说完再点一下提交"}
+                    </p>
+                    <div className="voice-actions">
+                      <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => setShowEndDialog(true)}
+                      >
+                        立即结束
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="composer">

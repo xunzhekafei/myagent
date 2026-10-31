@@ -397,3 +397,16 @@ def test_delete_cancels_running_turn(tmp_path):
             service.store.get(session["id"])
     finally:
         service.close()
+
+
+def test_session_mode_defaults_to_text_and_can_be_voice(tmp_path):
+    with TestClient(create_app(tmp_path, FakeAgent(), recognizer=None)) as client:
+        default = client.post("/api/sessions",
+                              json={"candidate": "甲", "role": "AI"}).json()
+        voice = client.post("/api/sessions",
+                            json={"candidate": "乙", "role": "AI", "mode": "voice"}).json()
+        assert default["mode"] == "text"
+        assert voice["mode"] == "voice"
+        listed = {item["id"]: item["mode"] for item in client.get("/api/sessions").json()}
+        assert listed[default["id"]] == "text"
+        assert listed[voice["id"]] == "voice"

@@ -34,7 +34,8 @@
 | 运行恢复 | 取消、重试、提交去重、断线后恢复快照、服务重启后保留未完成记录 |
 | 题库检索 | 内置 8990 道 AI 与前端岗位题，支持中英文关键词、类别、岗位和阶段筛选 |
 | CLI 运行时 | 32 个主工具、hooks、任务图、记忆、上下文压缩、cron、子代理、团队、MCP 与 workflow |
-| 语音转文字 | **可选、默认关闭**（要另装依赖，占 4 GB 左右磁盘）。本地 faster-whisper，录音 → 转写 → 确认后按文字提交。TTS 与实时转写尚未接入 |
+| 语音转文字 | **可选、默认关闭**（要另装依赖，占 4 GB 左右磁盘）。本地 faster-whisper，录音 → 转写 → 确认后按文字提交。纯语音会话用浏览器 TTS 朗读回复；后端 TTS 与实时转写尚未接入 |
+| 纯语音会话 | 创建时选「纯语音」：不显示文字输入框，说话后自动转写提交；面试官回复用浏览器 TTS 朗读，读完自动开始下一轮，点麦克风可打断。ASR 沿用本地 faster-whisper，没有新增模型 |
 
 Web 版面向**本地单用户**，使用单后端进程与单工作线程队列；评分 workflow 内部仍可并行处理子任务。
 Web 对话仅开放 `search_questions` 和 `load_skill`，评分与存档由后端管理。CLI 保留完整运行时能力。
@@ -221,7 +222,8 @@ Agent 适配层（backend/agent_adapter.py）
     └── interview-report：解析问答 → 逐题评分 → 汇总报告
 
 CLI：agent.py → chat_loop → ask → agent_loop
-语音转文字：录音 → 本地 faster-whisper → 文字填入输入框 → 确认后走 answer（不经 WebSocket）；面试官回复 → TTS（未做）
+语音转文字：录音 → 本地 faster-whisper → 文字填入输入框 → 确认后走 answer（不经 WebSocket）；
+纯语音会话：录音 → 转写 → 自动提交，面试官回复用浏览器 TTS 朗读（后端 TTS 未做）
 ```
 
 `agent.py` 的主循环手动处理模型请求、工具调用和结果回传，使用 SDK 的 `messages.stream()` 接收增量文本。

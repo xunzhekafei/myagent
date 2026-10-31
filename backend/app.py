@@ -54,6 +54,8 @@ class SessionInput(BaseModel):
     background: str = Field(default="", max_length=8000)
     # 面试压力档位，各档规则见 skills/mock-interviewer/SKILL.md
     pressure: Literal["温和", "标准", "压力"] = "标准"
+    # 交互方式：文字 / 纯语音。纯语音会话不显示文字输入框，回答自动转写提交。
+    mode: Literal["text", "voice"] = "text"
 
 
 class Command(BaseModel):
@@ -107,6 +109,8 @@ def create_app(directory=None, adapter=None, recognizer=_AUTO):
         capabilities = dict(CAPABILITIES)          # 复制一份，不 mutate 模块级共享的那份
         capabilities["asr"] = recognizer is not None
         capabilities["ready"] = bool(recognizer is not None and recognizer.ready())
+        # 有识别能力就同时支持文字和纯语音会话
+        capabilities["input_modes"] = ["text", "voice"] if recognizer is not None else ["text"]
         return capabilities
 
     @app.get("/api/health")
@@ -115,8 +119,12 @@ def create_app(directory=None, adapter=None, recognizer=_AUTO):
 
     @app.get("/api/sessions")
     def sessions():
-        return [{key: s[key] for key in ("id", "candidate", "role", "created_at", "status")}
-                for s in app.state.service.store.list()]
+        # 老场次没有 mode 字段，按文字处理
+        return [{
+            "id": s["id"], "candidate": s["candidate"], "role": s["role"],
+            "created_at": s["created_at"], "status": s["status"],
+            "mode": s.get("mode") or "text",
+        } for s in app.state.service.store.list()]
 
     @app.get("/api/profile")
     def profile():

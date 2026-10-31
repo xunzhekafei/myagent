@@ -88,7 +88,7 @@ HTTP：
 | --- | --- |
 | `GET /api/health` | 密钥是否配置、语音能力 |
 | `GET /api/sessions` | 场次列表 |
-| `POST /api/sessions` | 创建场次：`candidate / role / background / pressure`。`pressure` 取 `温和` / `标准`（默认）/ `压力`，只认这三档，别的值返回 422 |
+| `POST /api/sessions` | 创建场次：`candidate / role / background / pressure / mode`。`pressure` 取 `温和` / `标准`（默认）/ `压力`，只认这三档；`mode` 取 `text`（默认）/ `voice`，别的值返回 422 |
 | `GET /api/sessions/{id}` | 完整场次快照 |
 | `DELETE /api/sessions/{id}` | 删除场次（快照 + 全部事件）。正在跑的回合会先取消；404 表示场次不存在 |
 | `GET /api/sessions/{id}/report` | 评分报告 |
@@ -130,7 +130,7 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
 
 **已实现，但默认关闭**（要另装 `requirements-speech.txt`）：录音 → 本地 faster-whisper 转写 →
 文字填入输入框 → 用户确认或修改 → 走原来的 `answer` 提交。
-**TTS、实时部分转写、自动断句与打断仍未做。**
+**后端 TTS、实时部分转写、自动断句仍未做**；纯语音会话使用浏览器 TTS 朗读，见下一节。
 
 三种状态：什么都不做 = 没有语音（麦克风按钮不出现）；装了依赖 = 有语音；
 装了但设 `WEB_SPEECH=off`（接受 `0` / `false` / `no`，大小写与空格不敏感）= 仍按没有语音处理，
@@ -166,6 +166,20 @@ WebSocket：`/api/sessions/{id}/ws`。客户端提交：
   `start-web.ps1` 默认设 `HF_ENDPOINT=https://hf-mirror.com`——国内直连 Hugging Face 通常卡到超时。
 - 音频转写完即丢，**不落盘**。
 - 端点没有 `request_id` 幂等：本地无副作用、结果确定，重复转写无害。
+
+## 纯语音会话
+
+会话创建时 `mode="voice"` 进入纯语音模式，和文字会话是两个独立的交互方式：
+
+- 不显示文字输入框，页面中间是大麦克风按钮
+- 录音 → `/transcribe` → **自动提交**（不经过输入框确认），`input_mode="voice"`
+- 面试官回复通过浏览器 `speechSynthesis` 朗读；Markdown 记号会去掉，代码块不朗读
+- 朗读结束后自动开始下一轮录音；点麦克风可以打断朗读（`speechSynthesis.cancel()`）
+- 后端只多了 `mode` 字段；ASR 沿用 faster-whisper，没有新增模型
+- 文字会话不受影响，仍是默认模式；老场次没有 `mode` 字段，按文字处理
+
+前端选择音色：优先 `zh-CN`，其次任意 `zh`；找不到中文音色时用系统默认。
+浏览器 TTS 不需要密钥、不联网、不落盘；音色质量取决于操作系统。
 
 ## 尚未接入（TTS 与实时语音）
 

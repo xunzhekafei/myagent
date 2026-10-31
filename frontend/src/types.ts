@@ -29,8 +29,11 @@ export type SessionSummary = {
   role: string;
   created_at: string;
   status: string;
+  /** 老场次没有这个字段，按文字处理 */
+  mode?: SessionMode;
 };
 export type Pressure = "温和" | "标准" | "压力";
+export type SessionMode = "text" | "voice";
 
 export type Session = SessionSummary & {
   background: string;

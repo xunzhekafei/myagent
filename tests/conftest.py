@@ -12,6 +12,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-offline")  # 只在缺失时兜底，不影响 slow 测试
+os.environ["MODEL"] = "claude-haiku-4-5"                       # 自动化测试不用 pro（太贵）
 
 import agent  # noqa: E402
 

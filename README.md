@@ -350,7 +350,7 @@ npm run format
 | `WEB_SPEECH` | 设 `off` 关闭语音转文字（装了依赖但不想用时） |
 | `INTERVIEW_MEMORY` | 设 `off` 关闭面试笔记（跨项目覆盖与对比）。关闭后每轮不再额外调用模型 |
 | `INTERVIEW_DECAY` | 面试笔记的指数衰减系数，默认 `0.5`。越小越只关注最近几轮（取值 0.1–0.95） |
-| `MODEL` | 主模型请求名，默认 `claude-opus-5`（DeepSeek 兼容接口会映射）。接本地模型时设成 Ollama 的模型名 |
+| `MODEL` | 主模型请求名，默认 `claude-haiku-4-5`（映射到 `deepseek-v4-flash`，成本低）。需要最强质量时设 `claude-opus-5`（映射到 pro，**明显更贵**）；接本地模型时设成 Ollama 的模型名。**自动化测试和评测脚本强制用 flash** |
 | `ANTHROPIC_BASE_URL` | 接口地址，默认 `https://api.deepseek.com/anthropic`；接 Ollama 时设 `http://localhost:11434` |
 | `LOCAL_MODEL` | 设 `on` 时每轮只带最近 1.2 万字符历史，避免本地模型的 KV cache 爆显存 |
 | `HISTORY_CHAR_LIMIT` | 显式指定每轮历史字符上限，优先于 `LOCAL_MODEL` |

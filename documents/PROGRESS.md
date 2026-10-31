@@ -12,7 +12,9 @@
 
 模型通过 **Anthropic 官方 SDK** 调用，默认接口指向 **DeepSeek 的 Anthropic 兼容端点**
 （`https://api.deepseek.com/anthropic`），所以只需要一个 DeepSeek 密钥。
-`claude-opus-5` 会被映射到 `deepseek-v4-pro`。
+默认用 `claude-haiku-4-5`（映射到 `deepseek-v4-flash`，控制成本）；
+需要最强质量时显式设 `MODEL=claude-opus-5`（映射到 `deepseek-v4-pro`，明显更贵）。
+自动化测试和评测脚本强制使用 flash。
 
 模型地址和名称都可用环境变量覆盖；Ollama 从 v0.13 起原生支持 Anthropic `/v1/messages`，
 所以也可以完全本地运行（见「本地模型」一节），但 7B 模型的质量明显低于云端。
@@ -40,12 +42,14 @@
 | 10-30 | 工程债、评分校准、本地模型准备 | 静默失败治理 + CI 依赖锁；评分分档标尺（std 0.31→0.15）与口径版本号；Ollama 接入改为配置覆盖（默认行为不变）；测试达 192 |
 | 10-31 | 证据校验 + 追问深度阶梯 | 评分 evidence 必须是候选人逐字原话（机器校验，改写触发重试，耗尽标记未通过）；按回答质量决定深入/换角度/换主题，层数随压力档位（温和 2 / 标准 3 / 压力 4）；测试达 213 |
 | 10-31 | 弱点生命周期 + 评分口径单一来源 | 弱点按固定主题聚合，记录首次/最近/次数/改善/归档，按 1/3/7/14 天安排复习；维度与权重收拢到 `interview_spec.py`，总分改为加权和（v3，旧报告仍按均分口径）；测试达 228 |
+| 10-31 | 评分校准脚本 + 默认切 flash | 从已完成报告导出评测包，真人盲评后算 AI-人 / 人-人 Spearman ρ 与 bootstrap 区间（不调用模型）；默认模型与自动化场景统一使用 flash，pro 需显式 `MODEL=claude-opus-5`；测试达 234 |
 
 ## 当前状态速览
 
-- **提交**：49 个；**测试**：228 离线 + 2 冒烟；**评测用例**：26 条
-- **评测基线**：追问 15–17/17（单条有波动）、行为 4–5/5、评分 4/4
-- **评分区分度**（v3 加权）：优秀 8.15 / 较好 6.95 / 空洞 1.45 / 事实错误 0.72（0–10）
+- **提交**：50 个；**测试**：234 离线 + 2 冒烟；**评测用例**：26 条
+- **评测基线**（flash）：追问 17/17、行为 5/5、评分 4/4
+- **评分区分度**（v3 加权）：优秀 8.07 / 较好 6.87 / 空洞 2.58 / 事实错误 1.32（0–10）
+- **模型**：默认 `claude-haiku-4-5`（映射 flash）；评测脚本强制 flash，`EVAL_MODEL` 才能覆盖
 - **评分口径版本**：v1 旧报告仍按均分；v3 新报告按 30/30/25/15 加权，画像会提示跨版本不可比
 - **CI**：ubuntu + windows，Python 3.14，按 `requirements-lock.txt` 安装
 
@@ -126,6 +130,8 @@
 | 追问深度怎么控 | **动作由代码算，提示同时写「要做 / 不要做」** | 模型只判断回答质量（0-1），深入 / 换角度 / 换主题由确定性规则决定；层数上限跟着压力档位。目标越自由，越容易在「还能问」和「该收手」之间选错 |
 | 弱点怎么跨场次聚合 | **固定主题归类 + 生命周期 + 简化 SM-2** | 各场弱点是长句、措辞各异，纯相似度合并不了；先按 9 个主题归类，归不进去再走相似度。复习间隔用 1/3/7/14 天、低分重置——不直接上完整 SM-2，因为训练频次还不够 |
 | 评分口径怎么收拢 | **单一来源 `interview_spec.py` + 显式权重** | 维度名原来散在 agent.py / profile.py / 前端三处；权重显式化后总分不再四维等权。改口径必须升 `SCORING_VERSION`，旧报告按各自版本算，成长曲线才不会把「口径变了」画成「水平变了」 |
+| 模型成本怎么控 | **默认与自动化场景统一 flash** | pro 太贵，评测一次要跑几十次调用。默认 `claude-haiku-4-5`（映射 flash），评测脚本强制 flash（只有 `EVAL_MODEL` 能覆盖），测试 conftest 也强制。实测 flash 下评测更快，通过率没有下降 |
+| 评分靠不靠谱怎么验证 | **真人盲评 + Spearman + bootstrap** | 自动评测只能测「行为对不对」，测不了「分数像不像人」。校准脚本导出问答包，两位以上评委盲评 1-5 分，算 AI-人 ρ 与人-人 ρ 的比值；不调用模型，AI 分数直接读报告。小样本一律报区间 |
 
 ## 踩坑与修复日志
 
@@ -159,7 +165,7 @@
 
 ```bash
 pip install -r requirements-web.txt -r requirements-dev.txt
-python -m pytest            # 离线测试（228 个，不需要 API key，约 3 秒）
+python -m pytest            # 离线测试（234 个，不需要 API key，约 3 秒）
 python -m pytest -m slow    # 真实 API 冒烟测试（会消耗 token）
 python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
 
@@ -167,6 +173,10 @@ python agent.py             # 交互模式（需设置 ANTHROPIC_API_KEY）
 python evals/run_eval.py --group followup          # 追问质量，约 40 秒
 python evals/run_eval.py --group behavior          # 行为约束
 python evals/run_eval.py --group scoring --repeat 3  # 评分校准与稳定性
+
+# 真人盲评校准（不调用模型）
+python evals/calibration.py template   # 导出评测包和评分表
+python evals/calibration.py report     # 算 AI-人一致性
 ```
 
 跑一场模拟面试：
@@ -191,7 +201,7 @@ frontend/             React 界面（Vite）
 evals/                面试官评测集（24 条用例 + 裁判 + 运行器）
 skills/               技能（code-review / deepseek-api / mock-interviewer）
 interview/            题库导入脚本与数据
-tests/                测试（228 离线 + 2 冒烟）
+tests/                测试（234 离线 + 2 冒烟）
 tools/                维护脚本（从验证过的环境生成依赖锁）
 documents/            文档（本文件）
 .web-data/ .sessions/ .memory/ .tasks/ .interviews/ .runtime/ .transcripts/   运行产物（已 gitignore）

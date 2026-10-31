@@ -36,10 +36,11 @@ from interview_spec import (DIMENSION_NAMES, DIMENSION_WEIGHTS,
 
 logger = logging.getLogger(__name__)
 
-# 模型名：DeepSeek 兼容接口会把 claude-opus* 映射到 deepseek-v4-pro（最强），
-# claude-haiku* / claude-sonnet* 则映射到 deepseek-v4-flash（更快更便宜）。
-# 都可用环境变量覆盖：接 Ollama 等本地模型时设 MODEL=qwen2.5:7b。
-MODEL = os.environ.get("MODEL", "claude-opus-5")
+# 模型名：DeepSeek 兼容接口会把 claude-opus* 映射到 deepseek-v4-pro（最强、最贵），
+# claude-haiku* / claude-sonnet* 映射到 deepseek-v4-flash（更快更便宜）。
+# 默认用 flash 控制成本；需要最强质量时显式设 MODEL=claude-opus-5。
+# 自动化测试和评测脚本会强制使用 flash。
+MODEL = os.environ.get("MODEL", "claude-haiku-4-5")
 # 辅助调用（记忆召回/提取、目标判断）用快模型——它们每轮都跑，用 pro 会让每轮多等 10-30 秒
 AUX_MODEL = os.environ.get("AUX_MODEL", "claude-haiku-4-5")
 

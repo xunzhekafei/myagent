@@ -43,3 +43,6 @@ frontend/dist/
 
 # 评测结果（每次重新生成）
 evals/results/
+
+# 校准数据（含面试问答，不要提交）
+evals/calibration-data/

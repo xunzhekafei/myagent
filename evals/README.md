@@ -158,3 +158,27 @@ python evals/run_eval.py --no-judge
 
 评测要真调模型，有成本也有延迟，所以 `tests/` 的 `pytest.ini` 不包含它。
 想接 CI 的话建议单独一个 workflow、手动触发，或者只跑 `--no-judge`。
+
+## 评分校准（可选，不调用模型）
+
+代码里的分是 AI 打的。要判断它靠不靠谱，需要真人盲评做对照：
+
+```powershell
+# 1. 从已完成报告里导出评测包（只发 packets.json，不要发报告）
+python evals/calibration.py template
+
+# 2. 两位以上评委按 rubric.md 填 ratings.csv
+#    只看「问题 + 候选人回答」，不要看 AI 分数
+
+# 3. 算一致性
+python evals/calibration.py report
+```
+
+输出在 `evals/calibration-data/`：`calibration.md` + `calibration.json`。
+
+核心指标是 **`AI / 人`**：AI-人 Spearman ρ 与人-人 ρ 的比值。
+1.0 表示和人类评委一样一致；0.8 以上通常算好，0.6 以下值得回头查评分 prompt。
+人-人 ρ 是天花板——真人之间只有 0.5 时，不要要求 AI 更高。
+
+样本建议 ≥10 个评测包、≥2 位评委；小样本一律看 95% bootstrap 区间，不要只看点估计。
+这个脚本**不调用模型**：AI 分数直接读报告里已经存好的，不产生额外费用。

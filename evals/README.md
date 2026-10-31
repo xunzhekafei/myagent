@@ -164,7 +164,8 @@ python evals/run_eval.py --no-judge
 代码里的分是 AI 打的。要判断它靠不靠谱，需要真人盲评做对照：
 
 ```powershell
-# 1. 从已完成报告里导出评测包（只发 packets.json，不要发报告）
+# 1. 从已完成报告里导出评测包
+#    发给评委的是 packets-for-raters.json（已去掉 AI 分数，保证盲评）
 python evals/calibration.py template
 
 # 2. 两位以上评委按 rubric.md 填 ratings.csv

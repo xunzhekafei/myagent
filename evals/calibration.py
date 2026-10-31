@@ -235,6 +235,12 @@ def build_packets(sessions: list) -> list:
     return packets
 
 
+def public_packets(packets: list) -> list:
+    """给评委的版本：去掉 AI 分数，保证盲评。"""
+    return [{key: value for key, value in packet.items() if key != "ai_scores"}
+            for packet in packets]
+
+
 def write_template(sessions: list, out: Path = DATA):
     out.mkdir(parents=True, exist_ok=True)
     packets = build_packets(sessions)
@@ -242,6 +248,10 @@ def write_template(sessions: list, out: Path = DATA):
         raise SystemExit("没有可导出的问答对——先完成至少一场面试并生成报告")
     (out / "packets.json").write_text(
         json.dumps(packets, ensure_ascii=False, indent=2), encoding="utf-8")
+    # 评委只拿到这一份：没有 ai_scores
+    (out / "packets-for-raters.json").write_text(
+        json.dumps(public_packets(packets), ensure_ascii=False, indent=2),
+        encoding="utf-8")
 
     with (out / "ratings.csv").open("w", newline="", encoding="utf-8-sig") as handle:
         writer = csv.writer(handle)
@@ -264,7 +274,8 @@ def write_template(sessions: list, out: Path = DATA):
         encoding="utf-8")
 
     print(f"已生成 {len(packets)} 个评测包：{out}")
-    print("  1. 把 packets.json 发给评委（只发这个文件，不要发报告）")
+    print("  1. 把 packets-for-raters.json + ratings.csv + rubric.md 发给评委"
+          "（不要发 packets.json 或报告——里面有 AI 分数）")
     print("  2. 评委按 rubric.md 填 ratings.csv")
     print("  3. python evals/calibration.py report")
 

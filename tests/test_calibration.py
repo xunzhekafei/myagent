@@ -49,6 +49,16 @@ def test_compute_warns_on_small_sample():
     assert result["overall"]["headline"].startswith("样本不足")
 
 
+def test_public_packets_strip_ai_scores():
+    """发给评委的版本不能带 AI 分数，否则不是盲评。"""
+    packets = [{"id": "p1", "question": "Q", "answer": "A",
+                "ai_scores": {"技术正确性": 8}}]
+    public = calibration.public_packets(packets)
+    assert "ai_scores" not in public[0]
+    assert public[0]["question"] == "Q"
+    assert "ai_scores" in packets[0]          # 原数据不被修改
+
+
 def test_build_packets_pairs_questions_and_answers():
     session = {
         "id": "abc123def456",

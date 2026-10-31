@@ -519,6 +519,24 @@ $env:LOCAL_MODEL        = "on"          # 历史只带最近 1.2 万字符
   `interview` 技能。只借鉴方法论，未安装它的技能文件（它的 `references/` 子目录和技能间交叉引用
   与本项目的技能加载方式不兼容）。
 
+**设计思路参考（2026-10 调研，未复制任何代码或文档）**
+
+在做评分校验、追问深度和长期画像时，调研过以下同类项目：
+
+| 项目 | 许可 | 借鉴的思路 |
+| --- | --- | --- |
+| [Hazehacker/backend-interview-simulator](https://github.com/Hazehacker/backend-interview-simulator) | MIT | 追问深度链（结论 → 原理 → 边界 → 取舍 → 验证）、证据 ID 去重、按身份给维度加权（**尚未实现**） |
+| [cjxxx222/echo-interview](https://github.com/cjxxx222/echo-interview) | MIT | 扣分证据必须是逐字原话、机器校验与重试、维度/权重单一来源、真人盲评校准方法 |
+| [XUZIAa/Multi-Agent-Mock-Interview](https://github.com/XUZIAa/Multi-Agent-Mock-Interview) | GPL-3.0 | 双环架构（实时语音只负责说话，状态机/导演决定下一步）、确定性深度阶梯 |
+| [AnnaSuSu/TechSpar](https://github.com/AnnaSuSu/TechSpar) | AGPL-3.0 | 长期画像、弱点生命周期、简化 SM-2 复习调度 |
+
+**关于版权**：以上项目仅用于调研和设计参考，本项目**没有复制、链接或修改它们的代码或文档**；
+对应功能都是按公开的思路另行实现的。GPL-3.0 / AGPL-3.0 项目尤其如此——只借鉴思路、不引入其代码，
+因此本项目仍按 MIT 许可发布。
+
+**与题库来源的区别**：题库的题目文本确实被导入仓库，所以上面的来源表和下面的许可声明必须保留；
+设计思路参考不涉及代码或数据的再分发，列在这里是为了透明，不构成额外的许可义务。
+
 ## 许可
 
 本项目代码：MIT License（见 [LICENSE](LICENSE)）。
